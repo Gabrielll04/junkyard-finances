@@ -1,0 +1,13 @@
+{
+  "_comentario": "Manifesto TEMPORARIO, usado apenas pelo projeto avulso enquanto se roda Vincular.gs. Cole este conteudo no appsscript.json do projeto avulso, rode a migracao e depois pode descartar: o projeto vinculado que sera criado NAO herda estes escopos.",
+  "timeZone": "America/Sao_Paulo",
+  "dependencies": {},
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/script.projects",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+  ]
+}

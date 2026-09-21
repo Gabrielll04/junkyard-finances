@@ -37,6 +37,8 @@ ele gera sugestões por regras internas.
 | `src/Sidebar.html` | Interface HTML embutida (CSS + JS inline, sem dependências externas). |
 | `src/Testes.gs` | 14 funções de teste + execução em bateria, com limpeza automática. |
 | `src/ImportacaoFutura.gs` | Estrutura e stubs para importação de holerites/comprovantes. |
+| `src/Vincular.gs` | **Uso único.** Cria um projeto Apps Script já vinculado a uma planilha e copia o código para ele, via API do Apps Script. Resolve o caso de quem criou um projeto avulso por engano. |
+| `src/appsscript.migracao.json` | Manifesto temporário com os escopos que `Vincular.gs` precisa. |
 
 ## Início rápido
 
@@ -46,6 +48,10 @@ ele gera sugestões por regras internas.
    (`Sidebar.html` como arquivo HTML; os `.gs` como arquivos de script).
 4. Rode `setupFinanceiro()` uma vez e autorize.
 5. Recarregue a planilha e use o menu **Financeiro**.
+
+> **Já colou o código num projeto avulso (script.google.com) e o menu não
+> aparece?** Não precisa refazer nada: veja
+> [`docs/INSTALACAO.md` § 3.9](docs/INSTALACAO.md#39-vincular-um-projeto-avulso-a-uma-planilha).
 
 Instruções detalhadas em [`docs/INSTALACAO.md`](docs/INSTALACAO.md).
 

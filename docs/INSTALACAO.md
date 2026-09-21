@@ -223,3 +223,96 @@ Há duas leituras diferentes, e vale saber qual usar:
 | Gráficos não aparecem | `mostrar_graficos` está `NAO`, ou o painel ainda não foi atualizado. Use `Configuração → Mostrar/ocultar gráficos`. |
 | "Este lançamento é o espelho de um movimento de meta" | Aportes e resgates se editam pela meta, não pelo extrato. Registre um movimento compensatório. |
 | Recorrência não gerou nada | Ela está inativa, a data de início é futura, a data final já passou, ou as ocorrências já foram geradas antes. |
+
+## 3.9 Vincular um projeto avulso a uma planilha
+
+Se você criou o projeto em `script.google.com` (projeto **avulso**) e colou o
+código lá, o menu **Financeiro** nunca vai aparecer: `onOpen()` não dispara e
+`SpreadsheetApp.getActiveSpreadsheet()` devolve `null`.
+
+**Pela interface do Google não existe como vincular depois.** Mas pela **API do
+Apps Script** existe: o endpoint `projects.create` aceita um `parentId`, que é o
+ID do arquivo do Drive ao qual o projeto nasce vinculado. O `src/Vincular.gs`
+usa isso para criar o projeto vinculado **e copiar todo o seu código para ele**,
+sem você colar nada de novo.
+
+### Passo 1 — Ative a API do Apps Script
+
+Abra <https://script.google.com/home/usersettings> e ligue
+**"API do Google Apps Script"**.
+
+É uma configuração **por conta**. Confira pelo avatar, no canto superior
+direito, que você está na mesma conta em que o projeto avulso vive.
+
+### Passo 2 — Declare os escopos no projeto avulso
+
+No editor: **⚙ Configurações do projeto** → marque **"Mostrar arquivo de
+manifesto `appsscript.json`"**. Abra o `appsscript.json` e substitua o conteúdo
+pelo de `src/appsscript.migracao.json` (sem a linha `_comentario`):
+
+```json
+{
+  "timeZone": "America/Sao_Paulo",
+  "dependencies": {},
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/script.projects",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+  ]
+}
+```
+
+Esses escopos largos servem **só para a migração**. O projeto vinculado que
+será criado não os herda: o `Vincular.gs` remove a lista de escopos do
+manifesto copiado, deixando o Apps Script detectar o mínimo necessário.
+
+### Passo 3 — Adicione o `Vincular.gs`
+
+Crie um arquivo de script chamado **`Vincular`** no projeto avulso e cole o
+conteúdo de `src/Vincular.gs`.
+
+### Passo 4 — Rode
+
+Escolha uma das duas funções na lista suspensa do editor e clique em
+**Executar**. Autorize quando a tela de permissões aparecer.
+
+| Situação | Função | O que fazer antes |
+|---|---|---|
+| A planilha já existe | `vincularProjetoAPlanilha` | Preencher `ID_PLANILHA_DESTINO` no topo do arquivo — aceita o ID puro **ou** a URL inteira |
+| Quer que o script crie a planilha | `criarPlanilhaJaVinculada` | Nada |
+
+Acompanhe pelo **Registro de execução** (`Ctrl+Enter`). No fim, ele imprime o
+link da planilha e o do projeto vinculado.
+
+### Passo 5 — Use
+
+1. Abra a planilha pelo link que apareceu no log.
+2. **Recarregue a página (F5).**
+3. O menu **Financeiro** aparece.
+4. `Financeiro → Configuração → Executar setup` e autorize.
+
+Você **não precisa abrir o editor do projeto novo** — o código já está lá. Só
+volte ao editor se for cadastrar chaves de IA em Propriedades do script.
+
+Depois de confirmar que o menu apareceu, pode apagar o projeto avulso.
+
+### Se der errado
+
+Rode **`diagnosticarAmbiente()`** no projeto avulso. Ele imprime em qual conta
+está rodando, o ID do projeto, se está vinculado a alguma planilha e se a API
+responde.
+
+| Erro | Causa | Solução |
+|---|---|---|
+| "A API do Apps Script está DESATIVADA" | Passo 1 não foi feito, ou foi feito noutra conta | Ligue em `script.google.com/home/usersettings`, **na conta certa**, espere um minuto |
+| `403` sem citar a API | Falta escopo no manifesto | Refaça o passo 2 e rode de novo, aceitando as permissões |
+| `404` | ID da planilha errado, ou a conta não enxerga o arquivo | Confira o ID; cole a URL inteira que o script extrai sozinho |
+| "Não consegui abrir a planilha" | A conta do projeto avulso não tem acesso de edição à planilha | Compartilhe a planilha com essa conta como **Editor** |
+
+> Este caminho usa a API pública do Apps Script e eu **não consegui testá-lo
+> daqui** — não há ambiente Google nesta sessão. O código está com tratamento de
+> erro detalhado justamente por isso: se falhar, a mensagem diz o que corrigir.
+> Me mande o que aparecer no log que eu ajusto.

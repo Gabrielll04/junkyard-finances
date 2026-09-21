@@ -32,6 +32,11 @@ As camadas são separadas por arquivo, de baixo para cima:
 
 `Setup.gs` cria e mantém a estrutura. `Testes.gs` exercita tudo.
 `ImportacaoFutura.gs` guarda a estrutura do que ainda virá.
+`Vincular.gs` fica fora desse desenho de propósito: é um utilitário de uso
+único, que roda num projeto avulso para criar o projeto vinculado à planilha
+via API do Apps Script (`projects.create` com `parentId`) e copiar o código
+para lá. Depois da migração ele não é mais necessário — e por isso o próprio
+`Vincular.gs` se exclui da cópia.
 
 Regra que sustenta o desenho: **nenhum arquivo além de `Repositorio.gs`
 (e `Dashboard.gs`, que cuida do layout visual) chama `getRange`/`getValues`

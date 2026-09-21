@@ -19,6 +19,7 @@ var ABAS = {
   DASHBOARD: 'Dashboard',
   METAS: 'Metas',
   LANCAMENTOS: 'Lancamentos',
+  RECORRENTES: 'Recorrentes',
   METAS_MOVIMENTOS: 'Metas_Movimentos',
   CATEGORIAS: 'Categorias',
   ORCAMENTOS: 'Orcamentos',
@@ -42,6 +43,12 @@ CABECALHOS[ABAS.LANCAMENTOS] = [
   'id_lancamento', 'data', 'tipo', 'valor', 'categoria', 'meta_id',
   'conta_origem', 'conta_destino', 'descricao', 'origem', 'status',
   'criado_em', 'atualizado_em'
+];
+CABECALHOS[ABAS.RECORRENTES] = [
+  'id_recorrente', 'descricao', 'tipo', 'valor', 'categoria', 'meta_id',
+  'dia_do_mes', 'frequencia_meses', 'data_inicio', 'data_fim', 'ativo',
+  'ultima_geracao', 'proxima_geracao', 'total_gerado', 'criado_em',
+  'atualizado_em', 'observacoes'
 ];
 CABECALHOS[ABAS.METAS_MOVIMENTOS] = [
   'id_movimento', 'data', 'meta_id', 'tipo_movimento', 'valor',
@@ -95,6 +102,7 @@ var STATUS_META = { ATIVA: 'ATIVA', INATIVA: 'INATIVA', CONCLUIDA: 'CONCLUIDA' }
 var PREFIXOS_ID = {
   META: 'MET',
   LANCAMENTO: 'LAN',
+  RECORRENTE: 'REC',
   MOVIMENTO: 'MOV',
   CATEGORIA: 'CAT',
   IMPORTACAO: 'IMP'

@@ -20,6 +20,16 @@ var DASHBOARD_AREA_LIVRE = 34;
 var DASHBOARD_CELULA_MES = 'F2';
 
 /**
+ * Area tecnica que alimenta os graficos nativos. Fica nas colunas I..N,
+ * que sao ocultadas: o usuario ve os graficos, nao a tabela que os move.
+ *   I:K -> Mes | Receitas | Despesas  (12 meses)
+ *   M:N -> Categoria | Total          (top 5 + Outros)
+ */
+var DASHBOARD_COLUNA_SERIE = 9;      // I
+var DASHBOARD_COLUNA_CATEGORIAS = 13; // M
+var DASHBOARD_ULTIMA_COLUNA_DADOS = 14; // N
+
+/**
  * Cria/atualiza toda a estrutura visual do Dashboard.
  * Chamada pelo setup e sempre que o layout precisar ser refeito.
  */
@@ -27,8 +37,9 @@ function montarLayoutDashboard() {
   var aba = obterAbaSegura(ABAS.DASHBOARD);
 
   // Garante espaco minimo.
-  if (aba.getMaxColumns() < 7) {
-    aba.insertColumnsAfter(aba.getMaxColumns(), 7 - aba.getMaxColumns());
+  if (aba.getMaxColumns() < DASHBOARD_ULTIMA_COLUNA_DADOS) {
+    aba.insertColumnsAfter(aba.getMaxColumns(),
+                           DASHBOARD_ULTIMA_COLUNA_DADOS - aba.getMaxColumns());
   }
   if (aba.getMaxRows() < 60) {
     aba.insertRowsAfter(aba.getMaxRows(), 60 - aba.getMaxRows());
@@ -253,6 +264,10 @@ function atualizarDashboard(mesReferencia) {
     // --- sugestoes (IA ou regras) ------------------------------------------
     _escreverBlocoSugestoes(aba, ind);
 
+    // --- graficos nativos ---------------------------------------------------
+    _atualizarDadosGraficos(aba, ind);
+    _garantirGraficos(aba);
+
     aba.getRange('B2').setValue(new Date());
     logInfo('atualizarDashboard', 'Painel atualizado', { mes: mes });
     return ind;
@@ -295,6 +310,141 @@ function _escreverBlocoSugestoes(aba, ind) {
   aba.getRange(2, 7, recorte.length, 1).setValues(recorte).setWrap(true)
     .setVerticalAlignment('top');
   aba.getRange(2, 7).setFontWeight('bold').setBackground('#d9e2f3');
+}
+
+// ===========================================================================
+// GRAFICOS NATIVOS
+// ===========================================================================
+
+/**
+ * Escreve, na area tecnica oculta, os dados que alimentam os graficos.
+ * Os graficos apontam para intervalos FIXOS, entao a quantidade de linhas
+ * gravada e sempre a mesma: linhas sem dado ficam em branco e o Sheets as
+ * ignora ao desenhar.
+ *
+ * @param {Sheet} aba
+ * @param {Object} ind Indicadores ja calculados.
+ * @private
+ */
+function _atualizarDadosGraficos(aba, ind) {
+  try {
+    // --- serie mensal (12 meses) -------------------------------------------
+    var serie = (ind.serieMensal || []).slice(-12);
+    var linhasSerie = [['Mes', 'Receitas', 'Despesas']];
+    for (var i = 0; i < 12; i++) {
+      var mes = serie[i];
+      linhasSerie.push(mes
+        ? [_rotuloMesCurto(mes.mes), mes.receitas, mes.despesas]
+        : ['', '', '']);
+    }
+    aba.getRange(1, DASHBOARD_COLUNA_SERIE, linhasSerie.length, 3)
+      .setValues(linhasSerie);
+
+    // --- despesas por categoria (top 5 + Outros) ---------------------------
+    var categorias = (ind.topCategorias || []).slice(0, 5);
+    var somaTop = categorias.reduce(function (acc, c) { return acc + c.total; }, 0);
+    var outros = arredondar2(Math.max(ind.despesas - somaTop, 0));
+
+    var linhasCategorias = [['Categoria', 'Total']];
+    categorias.forEach(function (c) {
+      linhasCategorias.push([c.categoria, c.total]);
+    });
+    if (outros > 0) linhasCategorias.push(['Outros', outros]);
+    while (linhasCategorias.length < 8) linhasCategorias.push(['', '']);
+
+    aba.getRange(1, DASHBOARD_COLUNA_CATEGORIAS, linhasCategorias.length, 2)
+      .setValues(linhasCategorias);
+
+    // Esconde a area tecnica (idempotente).
+    aba.hideColumns(DASHBOARD_COLUNA_SERIE,
+                    DASHBOARD_ULTIMA_COLUNA_DADOS - DASHBOARD_COLUNA_SERIE + 1);
+
+  } catch (e) {
+    logErro('_atualizarDadosGraficos', 'Falha ao preparar dados dos graficos', e.message);
+  }
+}
+
+/**
+ * Cria os graficos se ainda nao existirem (ou os remove, se desligados).
+ *
+ * Os graficos apontam para intervalos fixos, entao NAO precisam ser recriados
+ * a cada atualizacao: basta os dados mudarem que eles se redesenham sozinhos.
+ * Recriar so quando faltam evita piscar o painel e gasta menos tempo de
+ * execucao.
+ *
+ * @param {Sheet} aba
+ * @private
+ */
+function _garantirGraficos(aba) {
+  try {
+    var mostrar = obterConfigBooleano('mostrar_graficos', true);
+    var existentes = aba.getCharts();
+
+    if (!mostrar) {
+      existentes.forEach(function (gr) { aba.removeChart(gr); });
+      return;
+    }
+    if (existentes.length >= 2) return; // ja estao la e apontam para os mesmos dados
+
+    // Estado inconsistente (1 grafico, ou nenhum): refaz os dois.
+    existentes.forEach(function (gr) { aba.removeChart(gr); });
+
+    var evolucao = aba.newChart()
+      .setChartType(Charts.ChartType.COLUMN)
+      .addRange(aba.getRange(1, DASHBOARD_COLUNA_SERIE, 13, 3))
+      .setPosition(4, 8, 10, 0)
+      .setOption('title', 'Receitas x despesas (12 meses)')
+      .setOption('width', 460)
+      .setOption('height', 260)
+      .setOption('legend', { position: 'bottom' })
+      .setOption('colors', ['#1e7d45', '#b3261e'])
+      .setOption('hAxis', { slantedText: true, slantedTextAngle: 45 })
+      .build();
+    aba.insertChart(evolucao);
+
+    var categorias = aba.newChart()
+      .setChartType(Charts.ChartType.PIE)
+      .addRange(aba.getRange(1, DASHBOARD_COLUNA_CATEGORIAS, 8, 2))
+      .setPosition(18, 8, 10, 0)
+      .setOption('title', 'Despesas por categoria (mes)')
+      .setOption('width', 460)
+      .setOption('height', 260)
+      .setOption('legend', { position: 'right' })
+      .setOption('pieSliceText', 'percentage')
+      .build();
+    aba.insertChart(categorias);
+
+    logInfo('_garantirGraficos', 'Graficos do painel criados');
+
+  } catch (e) {
+    // Grafico e enfeite util, nunca motivo para derrubar a atualizacao do painel.
+    logErro('_garantirGraficos', 'Falha ao criar graficos', e.message);
+  }
+}
+
+/**
+ * Rotulo curto de mes para o eixo do grafico: "2026-03" vira "mar/26".
+ * @param {string} chave yyyy-MM
+ * @return {string}
+ * @private
+ */
+function _rotuloMesCurto(chave) {
+  var nomes = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun',
+               'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  var partes = String(chave).split('-');
+  var indice = parseInt(partes[1], 10) - 1;
+  if (isNaN(indice) || indice < 0 || indice > 11) return String(chave);
+  return nomes[indice] + '/' + String(partes[0]).slice(2);
+}
+
+/**
+ * Remove os graficos do painel (usado ao desligar a opcao ou em testes).
+ */
+function removerGraficosDashboard() {
+  var aba = obterAbaSegura(ABAS.DASHBOARD);
+  var total = aba.getCharts().length;
+  aba.getCharts().forEach(function (gr) { aba.removeChart(gr); });
+  return { sucesso: true, mensagem: total + ' grafico(s) removido(s) do painel.' };
 }
 
 /**

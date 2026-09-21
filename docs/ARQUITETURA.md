@@ -22,7 +22,7 @@ As camadas são separadas por arquivo, de baixo para cima:
     +---------------+-----+------+----------------+------------------+
     |               |            |                |                  |
  Metas.gs     Financeiro.gs  Dashboard.gs   Indicadores.gs        IA.gs
-    |               |            |                |                  |
+    |          Recorrentes.gs     |                |                  |
     +---------------+------------+----------------+------------------+
                           |                   Previsoes.gs (funções puras)
                      Repositorio.gs       (única camada que fala com o Sheets)
@@ -44,6 +44,7 @@ diretamente nas abas de dados.**
 | `Dashboard` | Painel: KPIs, alertas, sugestões. | Fórmulas nativas + `Dashboard.gs` |
 | `Metas` | Cadastro das caixinhas (metas comuns e RESERVA). | `Metas.gs` |
 | `Lancamentos` | Extrato único: receitas, despesas, aportes, resgates, transferências. | `Financeiro.gs` |
+| `Recorrentes` | Regras de lançamento automático (aluguel, salário, aporte mensal). | `Recorrentes.gs` |
 | `Metas_Movimentos` | Histórico auditável do saldo de cada meta. | `Metas.gs` |
 | `Categorias` | Categorias, grupo (Fixo/Variável) e orçamento padrão. | `Setup.gs` / `Financeiro.gs` |
 | `Orcamentos` | Limites mensais por categoria; realizado e status calculados. | `Indicadores.gs` |
@@ -84,6 +85,19 @@ aportarEmMeta → comLock → _movimentarMeta
    6. atualizarCamposCalculadosMetas()
 ```
 
+**Geração de lançamentos recorrentes**
+
+```
+gerarLancamentosRecorrentes (menu, sidebar ou rotina diária)
+  1. lê TODAS as chaves já materializadas, em Lancamentos E Metas_Movimentos
+  2. para cada regra ativa, calcula as ocorrências vencidas até hoje
+  3. pula as que já existem (chave RECORRENTE:<id>:<aaaa-MM>)
+  4. materializa as que faltam:
+        RECEITA/DESPESA -> _inserirLancamento
+        APORTE_META     -> _movimentarMeta  (Metas_Movimentos + espelho)
+  5. atualiza ultima_geracao, total_gerado e proxima_geracao da regra
+```
+
 **Geração de sugestões**
 
 ```
@@ -113,6 +127,46 @@ gerarInsightsIA
 7. **Datas exibidas em dd/mm/aaaa**, valores com 2 casas decimais.
 
 ## 1.5 Decisões técnicas relevantes
+
+**Idempotência das recorrências por chave de origem.**
+Cada ocorrência gerada carrega `RECORRENTE:<id_recorrente>:<aaaa-MM>` no campo
+`origem`. Antes de gerar qualquer coisa, o sistema monta o conjunto das chaves
+já existentes e pula as repetidas. Rodar a geração dez vezes no mesmo dia
+produz o mesmo resultado que rodar uma vez — o que importa, já que ela roda no
+gatilho diário, no menu e na sidebar. Como uma recorrência de aporte grava em
+`Metas_Movimentos` (e não diretamente em `Lancamentos`), a varredura de chaves
+olha as **duas** abas; olhar só uma delas duplicaria todo aporte recorrente.
+
+**Aporte recorrente passa pelo caminho oficial da meta.**
+Seria mais simples inserir um `APORTE_META` direto em `Lancamentos`, mas isso
+quebraria a invariante de que o saldo da meta vem de `Metas_Movimentos`. Por
+isso `_gerarUmaOcorrencia` chama `_movimentarMeta`, que grava o movimento e
+deixa o espelho ser criado como em qualquer aporte manual.
+
+**Dia 31 é encaixado no último dia do mês.**
+`_dataDaOcorrencia` limita o dia ao último dia do mês de destino: dia 31 vira
+29 em fevereiro bissexto, 28 no comum e 30 em abril. Sem isso, `new Date(2026,
+1, 31)` viraria 3 de março e a recorrência escorregaria de mês em mês.
+
+**Gráficos apontam para intervalos fixos numa área oculta.**
+As colunas `I:N` do Dashboard guardam as séries que alimentam os gráficos e
+ficam escondidas. Os gráficos são criados uma única vez e apontam para
+intervalos de tamanho constante; atualizar o painel só reescreve os dados, e o
+Sheets redesenha sozinho. Recriar os gráficos a cada atualização piscaria o
+painel e gastaria tempo de execução à toa. Linhas sem dado ficam em branco e o
+Sheets as ignora ao desenhar. `mostrar_graficos = NAO` remove os gráficos sem
+mexer em código.
+
+**Editar o espelho de meta é proibido, não silenciosamente ignorado.**
+`_recusarSeForEspelhoDeMeta` bloqueia edição, cancelamento e exclusão de
+lançamentos com origem `META:`. Deixar editar daria a impressão de ter mudado o
+saldo da meta — que não mudaria, porque vem de outra aba. A mensagem de erro
+diz o caminho certo: registrar um aporte ou resgate compensatório.
+
+**Excluir lançamento é cancelar, por padrão.**
+`excluirLancamento` em modo `SOFT` marca `CANCELADO`: sai dos totais, a linha
+fica, e dá para reativar. O modo `HARD` apaga a linha, exige confirmação
+explícita e grava um retrato do lançamento em `Logs` antes.
 
 **`Metas_Movimentos` como fonte de verdade do saldo.**
 A alternativa seria derivar o saldo só de `Lancamentos`. Optei pela aba

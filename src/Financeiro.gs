@@ -228,36 +228,208 @@ function registrarTransferencia(data, valor, contaOrigem, contaDestino, descrica
 
 /**
  * Cancela um lancamento sem apagar o historico.
- * Se o lancamento for espelho de um movimento de meta, orienta o caminho certo.
+ * @param {string} idLancamento
+ * @param {string=} motivo
+ * @return {Object} Lancamento atualizado.
+ */
+function cancelarLancamento(idLancamento, motivo) {
+  return comLock(function () {
+    return _cancelarLancamentoInterno(idLancamento, motivo);
+  });
+}
+
+/**
+ * Nucleo do cancelamento, sem lock.
  * @param {string} idLancamento
  * @param {string=} motivo
  * @return {Object}
+ * @private
  */
-function cancelarLancamento(idLancamento, motivo) {
+function _cancelarLancamentoInterno(idLancamento, motivo) {
+  var lancamento = buscarPorId(ABAS.LANCAMENTOS, 'id_lancamento', idLancamento);
+  if (!lancamento) throw new Error('Lancamento nao encontrado: ' + idLancamento);
+
+  _recusarSeForEspelhoDeMeta(lancamento, 'cancelar');
+
+  if (String(lancamento.status || '').toUpperCase() === STATUS_LANCAMENTO.CANCELADO) {
+    return lancamento;
+  }
+
+  var descricao = String(lancamento.descricao || '');
+  if (motivo) descricao += ' [CANCELADO: ' + motivo + ']';
+
+  atualizarLinhaPorNumero(ABAS.LANCAMENTOS, lancamento._linha, {
+    status: STATUS_LANCAMENTO.CANCELADO,
+    descricao: descricao,
+    atualizado_em: new Date()
+  });
+  logAviso('cancelarLancamento', 'Lancamento cancelado',
+           { id_lancamento: idLancamento, motivo: motivo || '' });
+  return buscarPorId(ABAS.LANCAMENTOS, 'id_lancamento', idLancamento);
+}
+
+/**
+ * Impede mexer direto num lancamento que e espelho de um movimento de meta.
+ * O saldo da meta vem de Metas_Movimentos; editar o espelho daria a impressao
+ * de ter mudado algo que na verdade nao mudou.
+ *
+ * @param {Object} lancamento
+ * @param {string} acao Verbo usado na mensagem de erro.
+ * @private
+ */
+function _recusarSeForEspelhoDeMeta(lancamento, acao) {
+  if (String(lancamento.origem || '').indexOf('META:') === 0) {
+    throw new Error(
+      'Este lancamento e o espelho de um movimento de meta e nao pode ser ' +
+      acao + ' diretamente. Para reverter, registre um resgate ou aporte ' +
+      'compensatorio na meta.');
+  }
+}
+
+/**
+ * Obtem um lancamento pelo ID.
+ * @param {string} idLancamento
+ * @return {Object|null}
+ */
+function obterLancamento(idLancamento) {
+  return buscarPorId(ABAS.LANCAMENTOS, 'id_lancamento', idLancamento);
+}
+
+/**
+ * Edita um lancamento existente. Campos ausentes sao preservados.
+ *
+ * Nao e permitido editar espelhos de meta, nem transformar um lancamento
+ * comum em APORTE_META/RESGATE_META: esses tipos so nascem de um movimento
+ * real de meta, senao o saldo da meta e o extrato divergiriam.
+ *
+ * @param {string} idLancamento
+ * @param {Object} payload Campos a alterar (data, tipo, valor, categoria,
+ *                         descricao, status, conta_origem, conta_destino).
+ * @return {Object} Lancamento atualizado.
+ */
+function editarLancamento(idLancamento, payload) {
   return comLock(function () {
     var lancamento = buscarPorId(ABAS.LANCAMENTOS, 'id_lancamento', idLancamento);
     if (!lancamento) throw new Error('Lancamento nao encontrado: ' + idLancamento);
 
-    if (String(lancamento.origem || '').indexOf('META:') === 0) {
-      throw new Error(
-        'Este lancamento e o espelho de um movimento de meta. ' +
-        'Para reverter, registre um resgate/aporte compensatorio na meta.');
-    }
-    if (String(lancamento.status || '').toUpperCase() === STATUS_LANCAMENTO.CANCELADO) {
-      return lancamento;
+    _recusarSeForEspelhoDeMeta(lancamento, 'editado');
+
+    var tipoAtual = String(lancamento.tipo || '').toUpperCase();
+    if (tipoAtual === TIPOS_LANCAMENTO.APORTE_META ||
+        tipoAtual === TIPOS_LANCAMENTO.RESGATE_META) {
+      throw new Error('Lancamentos ligados a metas sao editados pela propria meta.');
     }
 
-    var descricao = String(lancamento.descricao || '');
-    if (motivo) descricao += ' [CANCELADO: ' + motivo + ']';
+    var dados = payload || {};
+    var campos = {};
 
-    atualizarLinhaPorNumero(ABAS.LANCAMENTOS, lancamento._linha, {
-      status: STATUS_LANCAMENTO.CANCELADO,
-      descricao: descricao,
-      atualizado_em: new Date()
-    });
-    logAviso('cancelarLancamento', 'Lancamento cancelado',
-             { id_lancamento: idLancamento, motivo: motivo || '' });
+    if (dados.data !== undefined && String(dados.data).trim() !== '') {
+      var data = converterParaData(dados.data);
+      if (!data) throw new Error('Data invalida. Use o formato dd/mm/aaaa.');
+      if (!_dataDentroDeLimitesRazoaveis(data)) {
+        throw new Error('Data fora de um intervalo plausivel.');
+      }
+      campos.data = data;
+    }
+
+    if (dados.tipo !== undefined && String(dados.tipo).trim() !== '') {
+      var tipo = String(dados.tipo).trim().toUpperCase();
+      if (!TIPOS_LANCAMENTO[tipo]) {
+        throw new Error('Tipo de lancamento invalido: "' + dados.tipo + '".');
+      }
+      if (tipo === TIPOS_LANCAMENTO.APORTE_META ||
+          tipo === TIPOS_LANCAMENTO.RESGATE_META) {
+        throw new Error('Para registrar aporte ou resgate, use a tela de metas. ' +
+          'Assim o saldo da meta e o extrato continuam consistentes.');
+      }
+      campos.tipo = tipo;
+    }
+
+    if (dados.valor !== undefined && String(dados.valor).trim() !== '') {
+      campos.valor = validarValorMonetario(dados.valor);
+    }
+
+    if (dados.categoria !== undefined && String(dados.categoria).trim() !== '') {
+      var tipoParaCategoria = campos.tipo || tipoAtual;
+      campos.categoria = garantirCategoria(String(dados.categoria).trim(),
+                                           tipoParaCategoria);
+    }
+
+    if (dados.descricao !== undefined) campos.descricao = String(dados.descricao);
+    if (dados.conta_origem !== undefined) campos.conta_origem = String(dados.conta_origem);
+    if (dados.conta_destino !== undefined) campos.conta_destino = String(dados.conta_destino);
+
+    if (dados.status !== undefined && String(dados.status).trim() !== '') {
+      var status = String(dados.status).trim().toUpperCase();
+      if (!STATUS_LANCAMENTO[status]) {
+        throw new Error('Status invalido. Use CONFIRMADO, PENDENTE ou CANCELADO.');
+      }
+      campos.status = status;
+    }
+
+    if (!Object.keys(campos).length) {
+      throw new Error('Nenhum campo valido para atualizar.');
+    }
+    campos.atualizado_em = new Date();
+
+    atualizarLinhaPorNumero(ABAS.LANCAMENTOS, lancamento._linha, campos);
+    logInfo('editarLancamento', 'Lancamento atualizado',
+            { id_lancamento: idLancamento, campos: Object.keys(campos) });
     return buscarPorId(ABAS.LANCAMENTOS, 'id_lancamento', idLancamento);
+  });
+}
+
+/**
+ * Exclui um lancamento.
+ *
+ * modo SOFT (padrao): marca como CANCELADO. Sai dos totais, mas a linha fica,
+ *                     e a operacao e reversivel.
+ * modo HARD: remove a linha de vez. Exige confirmacao explicita.
+ *
+ * @param {string} idLancamento
+ * @param {string=} modo 'SOFT' | 'HARD'
+ * @param {boolean=} confirmacao Obrigatoria no modo HARD.
+ * @return {{sucesso: boolean, modo: string, mensagem: string}}
+ */
+function excluirLancamento(idLancamento, modo, confirmacao) {
+  return comLock(function () {
+    var lancamento = buscarPorId(ABAS.LANCAMENTOS, 'id_lancamento', idLancamento);
+    if (!lancamento) throw new Error('Lancamento nao encontrado: ' + idLancamento);
+
+    _recusarSeForEspelhoDeMeta(lancamento, 'excluido');
+
+    var modoFinal = String(modo || 'SOFT').trim().toUpperCase();
+
+    if (modoFinal !== 'HARD') {
+      _cancelarLancamentoInterno(idLancamento, 'excluido pelo usuario');
+      return {
+        sucesso: true, modo: 'SOFT',
+        mensagem: 'Lancamento cancelado. Ele saiu dos totais mas continua na ' +
+                  'planilha, e pode ser reativado mudando o status para CONFIRMADO.'
+      };
+    }
+
+    if (!confirmacao) {
+      throw new Error('A exclusao definitiva exige confirmacao explicita. ' +
+        'Recomendado: cancelar o lancamento em vez de apaga-lo.');
+    }
+
+    // Retrato no log antes de sumir com a linha.
+    logAviso('excluirLancamento', 'Exclusao definitiva de lancamento (backup no log)', {
+      id_lancamento: lancamento.id_lancamento,
+      data: formatarData(lancamento.data),
+      tipo: lancamento.tipo,
+      valor: lancamento.valor,
+      categoria: lancamento.categoria,
+      descricao: lancamento.descricao,
+      origem: lancamento.origem
+    });
+
+    removerLinhaPorId(ABAS.LANCAMENTOS, 'id_lancamento', idLancamento);
+    return {
+      sucesso: true, modo: 'HARD',
+      mensagem: 'Lancamento excluido definitivamente. Um retrato dele ficou na aba Logs.'
+    };
   });
 }
 

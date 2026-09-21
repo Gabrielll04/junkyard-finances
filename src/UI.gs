@@ -27,6 +27,25 @@ function onOpen() {
 function criarMenu() {
   var ui = SpreadsheetApp.getUi();
 
+  var menuRecorrentes = ui.createMenu('Recorrentes')
+    .addItem('Nova recorrencia', 'menuNovaRecorrencia')
+    .addItem('Ver recorrencias', 'menuVerRecorrencias')
+    .addSeparator()
+    .addItem('Gerar agora', 'menuGerarRecorrentes')
+    .addSeparator()
+    .addItem('Ativar/desativar', 'menuAlternarRecorrencia')
+    .addItem('Excluir recorrencia', 'menuExcluirRecorrencia');
+
+  var menuLancamentos = ui.createMenu('Lancamentos')
+    .addItem('Registrar receita', 'menuRegistrarReceita')
+    .addItem('Registrar despesa', 'menuRegistrarDespesa')
+    .addSeparator()
+    .addItem('Ver ultimos lancamentos', 'menuVerLancamentos')
+    .addItem('Editar lancamento', 'menuEditarLancamento')
+    .addItem('Excluir lancamento', 'menuExcluirLancamento')
+    .addSeparator()
+    .addSubMenu(menuRecorrentes);
+
   var menuMetas = ui.createMenu('Metas')
     .addItem('Nova meta', 'menuNovaMeta')
     .addItem('Ver metas', 'menuListarMetas')
@@ -49,6 +68,8 @@ function criarMenu() {
   var menuConfiguracao = ui.createMenu('Configuracao')
     .addItem('Executar setup', 'menuExecutarSetup')
     .addItem('Reaplicar formatos e validacoes', 'menuReaplicarFormatos')
+    .addSeparator()
+    .addItem('Mostrar/ocultar graficos', 'menuAlternarGraficos')
     .addSeparator()
     .addItem('Status da IA', 'menuStatusIA')
     .addItem('Configurar IA', 'menuConfigurarIA')
@@ -74,6 +95,7 @@ function criarMenu() {
     .addItem('Registrar receita', 'menuRegistrarReceita')
     .addItem('Registrar despesa', 'menuRegistrarDespesa')
     .addSeparator()
+    .addSubMenu(menuLancamentos)
     .addSubMenu(menuMetas)
     .addSubMenu(menuSimulacoes)
     .addSeparator()
@@ -91,7 +113,7 @@ function abrirSidebar() {
     var html = HtmlService.createTemplateFromFile('Sidebar')
       .evaluate()
       .setTitle('Financas Pessoais')
-      .setWidth(400);
+      .setWidth(420);
     SpreadsheetApp.getUi().showSidebar(html);
   } catch (e) {
     _alerta('Nao foi possivel abrir o painel: ' + e.message);
@@ -246,6 +268,307 @@ function _registrarLancamentoViaDialogo(tipo, titulo) {
     return (tipo === TIPOS_LANCAMENTO.RECEITA ? 'Receita' : 'Despesa') +
       ' de ' + formatarMoeda(lancamento.valor) + ' registrada em ' +
       formatarData(lancamento.data) + ' (' + lancamento.categoria + ').';
+  });
+}
+
+/**
+ * Pede ao usuario que escolha um lancamento recente pelo numero.
+ * @param {string} titulo
+ * @param {number=} limite Padrao 15.
+ * @return {Object|null}
+ * @private
+ */
+function _escolherLancamento(titulo, limite) {
+  var lista = listarLancamentos({ limite: limite || 15, incluirCancelados: true });
+  if (!lista.length) {
+    _alerta('Nenhum lancamento registrado ainda.');
+    return null;
+  }
+
+  var texto = lista.map(function (l, i) {
+    var marca = String(l.status || '').toUpperCase() === STATUS_LANCAMENTO.CANCELADO
+      ? ' [CANCELADO]' : '';
+    return (i + 1) + ') ' + formatarData(l.data) + ' - ' + l.tipo + ' - ' +
+      formatarMoeda(paraNumero(l.valor) || 0) + ' - ' + l.categoria +
+      (l.descricao ? ' - ' + l.descricao : '') + marca;
+  }).join('\n');
+
+  var resposta = _perguntar(texto + '\n\nDigite o numero do lancamento:', titulo);
+  if (resposta === null) return null;
+
+  var indice = parseInt(resposta, 10) - 1;
+  if (isNaN(indice) || indice < 0 || indice >= lista.length) {
+    _alerta('Numero invalido.');
+    return null;
+  }
+  return lista[indice];
+}
+
+/** Mostra os ultimos lancamentos. */
+function menuVerLancamentos() {
+  _executarAcaoDeMenu('menuVerLancamentos', function () {
+    var lista = listarLancamentos({ limite: 20, incluirCancelados: true });
+    if (!lista.length) return 'Nenhum lancamento registrado ainda.';
+
+    return 'ULTIMOS LANCAMENTOS\n\n' + lista.map(function (l) {
+      var marca = String(l.status || '').toUpperCase() === STATUS_LANCAMENTO.CANCELADO
+        ? ' [CANCELADO]' : '';
+      return formatarData(l.data) + '  ' + l.tipo + '  ' +
+        formatarMoeda(paraNumero(l.valor) || 0) + '  ' + l.categoria +
+        (l.descricao ? '\n    ' + l.descricao : '') + marca;
+    }).join('\n');
+  });
+}
+
+/** Edita um lancamento pelo menu. */
+function menuEditarLancamento() {
+  _executarAcaoDeMenu('menuEditarLancamento', function () {
+    var lancamento = _escolherLancamento('Editar lancamento');
+    if (!lancamento) return '';
+
+    var campos = {};
+
+    var valor = _perguntar('Novo valor (vazio mantem ' +
+      formatarMoeda(paraNumero(lancamento.valor) || 0) + '):', 'Editar lancamento');
+    if (valor === null) return '';
+    if (valor) campos.valor = valor;
+
+    var categoria = _perguntar('Nova categoria (vazio mantem "' +
+      lancamento.categoria + '"):', 'Editar lancamento');
+    if (categoria === null) return '';
+    if (categoria) campos.categoria = categoria;
+
+    var data = _perguntar('Nova data dd/mm/aaaa (vazio mantem ' +
+      formatarData(lancamento.data) + '):', 'Editar lancamento');
+    if (data === null) return '';
+    if (data) campos.data = data;
+
+    var descricao = _perguntar('Nova descricao (vazio mantem; "-" limpa):',
+                               'Editar lancamento');
+    if (descricao === null) return '';
+    if (descricao === '-') campos.descricao = '';
+    else if (descricao) campos.descricao = descricao;
+
+    if (!Object.keys(campos).length) return 'Nada foi alterado.';
+
+    var atualizado = editarLancamento(lancamento.id_lancamento, campos);
+    atualizarDashboard();
+    return 'Lancamento atualizado: ' + formatarData(atualizado.data) + ' - ' +
+      atualizado.tipo + ' - ' + formatarMoeda(paraNumero(atualizado.valor) || 0) +
+      ' - ' + atualizado.categoria + '.';
+  });
+}
+
+/** Exclui (cancela ou apaga) um lancamento pelo menu. */
+function menuExcluirLancamento() {
+  _executarAcaoDeMenu('menuExcluirLancamento', function () {
+    var lancamento = _escolherLancamento('Excluir lancamento');
+    if (!lancamento) return '';
+
+    var definitiva = _confirmar(
+      formatarData(lancamento.data) + ' - ' + lancamento.tipo + ' - ' +
+      formatarMoeda(paraNumero(lancamento.valor) || 0) + ' - ' +
+      lancamento.categoria + '\n\n' +
+      'SIM = apagar a linha DEFINITIVAMENTE.\n' +
+      'NAO = cancelar (sai dos totais, a linha fica). Recomendado.');
+
+    if (!definitiva) {
+      var resultado = excluirLancamento(lancamento.id_lancamento, 'SOFT');
+      atualizarDashboard();
+      return resultado.mensagem;
+    }
+
+    if (!_confirmar('Tem certeza? Esta acao nao pode ser desfeita.')) {
+      return 'Operacao cancelada.';
+    }
+    var apagado = excluirLancamento(lancamento.id_lancamento, 'HARD', true);
+    atualizarDashboard();
+    return apagado.mensagem;
+  });
+}
+
+// ===========================================================================
+// ACOES DO MENU - RECORRENTES
+// ===========================================================================
+
+/**
+ * Pede ao usuario que escolha uma recorrencia pelo numero.
+ * @param {string} titulo
+ * @return {Object|null}
+ * @private
+ */
+function _escolherRecorrencia(titulo) {
+  var lista = listarRecorrentes(true);
+  if (!lista.length) {
+    _alerta('Nenhuma recorrencia cadastrada. Use "Nova recorrencia" primeiro.');
+    return null;
+  }
+
+  var texto = lista.map(function (r, i) {
+    return (i + 1) + ') ' + r.resumo + ' [' + (r.ativa ? 'ATIVA' : 'INATIVA') + ']';
+  }).join('\n');
+
+  var resposta = _perguntar(texto + '\n\nDigite o numero da recorrencia:', titulo);
+  if (resposta === null) return null;
+
+  var indice = parseInt(resposta, 10) - 1;
+  if (isNaN(indice) || indice < 0 || indice >= lista.length) {
+    _alerta('Numero invalido.');
+    return null;
+  }
+  return lista[indice];
+}
+
+/** Cria uma recorrencia via dialogos. */
+function menuNovaRecorrencia() {
+  _executarAcaoDeMenu('menuNovaRecorrencia', function () {
+    var titulo = 'Nova recorrencia';
+
+    var descricao = _perguntar('Descricao (ex.: Aluguel, Salario, Aporte da reserva):',
+                               titulo);
+    if (descricao === null) return '';
+    if (!descricao) throw new Error('A descricao e obrigatoria.');
+
+    var tipo = _perguntar('Tipo:\n' + TIPOS_RECORRENTE.join(' / '), titulo);
+    if (tipo === null) return '';
+    var tipoNormalizado = String(tipo).trim().toUpperCase();
+    if (TIPOS_RECORRENTE.indexOf(tipoNormalizado) === -1) {
+      throw new Error('Tipo invalido. Use: ' + TIPOS_RECORRENTE.join(', ') + '.');
+    }
+
+    var valor = _perguntar('Valor:', titulo);
+    if (valor === null) return '';
+
+    var metaId = '';
+    var categoria = '';
+    if (tipoNormalizado === 'APORTE_META') {
+      var meta = _escolherMeta('Recorrencia: escolha a meta', false);
+      if (!meta) return '';
+      metaId = meta.id_meta;
+    } else {
+      var categorias = listarNomesCategorias(tipoNormalizado);
+      categoria = _perguntar('Categoria:\n' + categorias.join(', '), titulo);
+      if (categoria === null) return '';
+    }
+
+    var dia = _perguntar('Dia do mes (1 a 31). Vazio = hoje:', titulo);
+    if (dia === null) return '';
+
+    var frequencia = _perguntar(
+      'Frequencia em meses:\n' +
+      Object.keys(FREQUENCIAS_RECORRENTE).map(function (f) {
+        return f + ' = ' + FREQUENCIAS_RECORRENTE[f];
+      }).join('\n') + '\n\nVazio = 1 (mensal):', titulo);
+    if (frequencia === null) return '';
+
+    var inicio = _perguntar('Data de inicio dd/mm/aaaa. Vazio = hoje:', titulo);
+    if (inicio === null) return '';
+
+    var fim = _perguntar('Data final dd/mm/aaaa (opcional, vazio = sem fim):', titulo);
+    if (fim === null) return '';
+
+    var regra = criarRecorrente({
+      descricao: descricao,
+      tipo: tipoNormalizado,
+      valor: valor,
+      categoria: categoria,
+      meta_id: metaId,
+      dia_do_mes: dia,
+      frequencia_meses: frequencia,
+      data_inicio: inicio,
+      data_fim: fim
+    });
+
+    var gerar = _confirmar('Recorrencia criada.\n\n' + regra.resumo +
+      '\n\nGerar agora as ocorrencias ja vencidas?');
+    var complemento = '';
+    if (gerar) {
+      var geracao = gerarLancamentosRecorrentes({ idRecorrente: regra.id_recorrente });
+      complemento = '\n\n' + geracao.mensagem;
+      atualizarDashboard();
+    }
+
+    return 'Recorrencia "' + regra.descricao + '" criada.\n' +
+      'Proxima ocorrencia: ' + (formatarData(regra.proxima_geracao) || 'a definir') +
+      complemento;
+  });
+}
+
+/** Lista as recorrencias cadastradas. */
+function menuVerRecorrencias() {
+  _executarAcaoDeMenu('menuVerRecorrencias', function () {
+    var lista = listarRecorrentes(true);
+    if (!lista.length) return 'Nenhuma recorrencia cadastrada.';
+
+    var texto = lista.map(function (r) {
+      var linha = '- ' + r.resumo + ' [' + (r.ativa ? 'ATIVA' : 'INATIVA') + ']';
+      if (r.nomeMeta) linha += '\n  Meta: ' + r.nomeMeta;
+      linha += '\n  Proxima: ' + (formatarData(r.proxima_geracao) || 'nenhuma') +
+        ' | Ja geradas: ' + (paraNumero(r.total_gerado) || 0);
+      return linha;
+    }).join('\n\n');
+
+    var comprometimento = calcularComprometimentoMensal();
+    texto += '\n\nCOMPROMETIMENTO MENSAL (equivalente)\n' +
+      'Receitas fixas: ' + formatarMoeda(comprometimento.receitas) + '\n' +
+      'Despesas fixas: ' + formatarMoeda(comprometimento.despesas) + '\n' +
+      'Aportes fixos: ' + formatarMoeda(comprometimento.aportes) + '\n' +
+      'Sobra prevista: ' + formatarMoeda(comprometimento.liquidoMensal);
+    return texto;
+  });
+}
+
+/** Gera as ocorrencias vencidas sob demanda. */
+function menuGerarRecorrentes() {
+  _executarAcaoDeMenu('menuGerarRecorrentes', function () {
+    var resultado = gerarLancamentosRecorrentes();
+    if (resultado.criados > 0) atualizarDashboard();
+
+    var texto = resultado.mensagem;
+    if (resultado.detalhes.length) {
+      texto += '\n\n' + resultado.detalhes.slice(0, 15).map(function (d) {
+        return '- ' + d.data + ' ' + d.tipo + ' ' + formatarMoeda(d.valor) +
+          ' - ' + d.descricao;
+      }).join('\n');
+    }
+    if (resultado.erros.length) {
+      texto += '\n\nERROS:\n- ' + resultado.erros.join('\n- ');
+    }
+    return texto;
+  });
+}
+
+/** Ativa ou desativa uma recorrencia. */
+function menuAlternarRecorrencia() {
+  _executarAcaoDeMenu('menuAlternarRecorrencia', function () {
+    var regra = _escolherRecorrencia('Ativar/desativar recorrencia');
+    if (!regra) return '';
+
+    if (regra.ativa) {
+      desativarRecorrente(regra.id_recorrente);
+      return 'Recorrencia "' + regra.descricao + '" desativada. ' +
+             'Nenhuma nova ocorrencia sera gerada.';
+    }
+    ativarRecorrente(regra.id_recorrente);
+    return 'Recorrencia "' + regra.descricao + '" ativada.';
+  });
+}
+
+/** Exclui uma recorrencia. */
+function menuExcluirRecorrencia() {
+  _executarAcaoDeMenu('menuExcluirRecorrencia', function () {
+    var regra = _escolherRecorrencia('Excluir recorrencia');
+    if (!regra) return '';
+
+    var definitiva = _confirmar(
+      regra.resumo + '\n' +
+      'Ocorrencias ja geradas: ' + (paraNumero(regra.total_gerado) || 0) + '\n\n' +
+      'SIM = apagar a regra DEFINITIVAMENTE.\n' +
+      'NAO = apenas desativar (recomendado, reversivel).\n\n' +
+      'Em qualquer caso os lancamentos ja gerados sao preservados.');
+
+    var resultado = excluirRecorrente(regra.id_recorrente, definitiva ? 'HARD' : 'SOFT');
+    return resultado.mensagem;
   });
 }
 
@@ -673,6 +996,21 @@ function menuReaplicarFormatos() {
   });
 }
 
+/** Liga ou desliga os graficos nativos do painel. */
+function menuAlternarGraficos() {
+  _executarAcaoDeMenu('menuAlternarGraficos', function () {
+    var ativos = obterConfigBooleano('mostrar_graficos', true);
+    definirConfig('mostrar_graficos', ativos ? 'NAO' : 'SIM');
+
+    if (ativos) {
+      removerGraficosDashboard();
+      return 'Graficos ocultados. Ative novamente por este mesmo menu.';
+    }
+    atualizarDashboard();
+    return 'Graficos ativados e desenhados no painel.';
+  });
+}
+
 /** Mostra o status da IA sem revelar chaves. */
 function menuStatusIA() {
   _executarAcaoDeMenu('menuStatusIA', function () {
@@ -890,6 +1228,9 @@ function uiObterEstado(mes) {
       insights: insights,
       categoriasReceita: listarNomesCategorias(TIPOS_LANCAMENTO.RECEITA),
       categoriasDespesa: listarNomesCategorias(TIPOS_LANCAMENTO.DESPESA),
+      recorrentes: _recorrentesParaInterface(),
+      comprometimento: _comprometimentoParaInterface(),
+      ultimosLancamentos: _lancamentosParaInterface({ limite: 25 }),
       statusIa: obterStatusIA(),
       atualizadoEm: formatarDataHora(new Date())
     };
@@ -903,12 +1244,33 @@ function uiObterEstado(mes) {
  */
 function uiRegistrarLancamento(payload) {
   return _respostaSidebar('uiRegistrarLancamento', function () {
-    var lancamento = registrarLancamento(payload);
+    var dados = payload || {};
+    var lancamento = registrarLancamento(dados);
+
+    // "Repetir este lancamento": cria a regra a partir do que acabou de ser
+    // lancado, comecando no proximo periodo (o deste mes ja foi feito agora).
+    var recorrencia = null;
+    if (dados.repetir) {
+      try {
+        recorrencia = criarRecorrenteAPartirDeLancamento(
+          lancamento, parseInt(dados.frequencia_meses, 10) || 1);
+      } catch (e) {
+        // O lancamento ja foi gravado; a recorrencia e um extra.
+        logErro('uiRegistrarLancamento', 'Lancamento salvo, recorrencia falhou', e.message);
+        recorrencia = { erro: e.message };
+      }
+    }
+
     atualizarDashboard();
     return {
       id: lancamento.id_lancamento,
       texto: lancamento.tipo + ' de ' + formatarMoeda(lancamento.valor) +
-             ' em ' + formatarData(lancamento.data) + ' (' + lancamento.categoria + ')'
+             ' em ' + formatarData(lancamento.data) + ' (' + lancamento.categoria + ')',
+      recorrencia: recorrencia
+        ? (recorrencia.erro
+            ? { erro: recorrencia.erro }
+            : { id: recorrencia.id_recorrente, resumo: recorrencia.resumo })
+        : null
     };
   });
 }
@@ -1030,5 +1392,226 @@ function uiListarMetas() {
         progresso: m.progressoPercentual
       };
     });
+  });
+}
+
+// ===========================================================================
+// SIDEBAR - EXTRATO E RECORRENCIAS
+// ===========================================================================
+
+/**
+ * Converte lancamentos para o formato leve consumido pela sidebar.
+ * @param {Object=} filtros Repassados a listarLancamentos().
+ * @return {Array<Object>}
+ * @private
+ */
+function _lancamentosParaInterface(filtros) {
+  return listarLancamentos(filtros || { limite: 25 }).map(function (l) {
+    var origem = String(l.origem || '');
+    return {
+      id: l.id_lancamento,
+      data: formatarData(l.data),
+      dataIso: Utilities.formatDate(
+        converterParaData(l.data) || new Date(), obterFusoHorario(), 'yyyy-MM-dd'),
+      tipo: String(l.tipo || ''),
+      valor: formatarMoeda(paraNumero(l.valor) || 0),
+      valorNumerico: arredondar2(paraNumero(l.valor) || 0),
+      categoria: String(l.categoria || ''),
+      descricao: String(l.descricao || ''),
+      status: String(l.status || ''),
+      cancelado: String(l.status || '').toUpperCase() === STATUS_LANCAMENTO.CANCELADO,
+      // Espelhos de meta e ocorrencias recorrentes sao somente leitura aqui.
+      editavel: origem.indexOf('META:') !== 0,
+      origem: origem
+    };
+  });
+}
+
+/**
+ * Converte recorrencias para o formato leve da sidebar.
+ * @return {Array<Object>}
+ * @private
+ */
+function _recorrentesParaInterface() {
+  return listarRecorrentes(true).map(function (r) {
+    return {
+      id: r.id_recorrente,
+      descricao: String(r.descricao || ''),
+      tipo: String(r.tipo || ''),
+      valor: formatarMoeda(r.valorNumerico),
+      categoria: String(r.categoria || ''),
+      meta: r.nomeMeta,
+      diaDoMes: paraNumero(r.dia_do_mes) || 1,
+      frequencia: r.frequenciaTexto,
+      frequenciaMeses: parseInt(paraNumero(r.frequencia_meses), 10) || 1,
+      proxima: formatarData(r.proxima_geracao),
+      totalGerado: paraNumero(r.total_gerado) || 0,
+      ativa: r.ativa
+    };
+  });
+}
+
+/**
+ * Comprometimento mensal formatado para exibicao.
+ * @return {Object}
+ * @private
+ */
+function _comprometimentoParaInterface() {
+  var totais = calcularComprometimentoMensal();
+  return {
+    receitas: formatarMoeda(totais.receitas),
+    despesas: formatarMoeda(totais.despesas),
+    aportes: formatarMoeda(totais.aportes),
+    liquido: formatarMoeda(totais.liquidoMensal),
+    liquidoNegativo: totais.liquidoMensal < 0,
+    quantidade: totais.quantidade
+  };
+}
+
+/**
+ * Lista lancamentos para a aba Extrato.
+ * @param {Object=} filtros {mes, tipo, categoria, limite, incluirCancelados}
+ * @return {Object}
+ */
+function uiListarLancamentos(filtros) {
+  return _respostaSidebar('uiListarLancamentos', function () {
+    var f = filtros || {};
+    return _lancamentosParaInterface({
+      mes: f.mes || null,
+      tipo: f.tipo || null,
+      categoria: f.categoria || null,
+      incluirCancelados: f.incluirCancelados !== false,
+      limite: parseInt(f.limite, 10) || 25
+    });
+  });
+}
+
+/**
+ * Edita um lancamento a partir da sidebar.
+ * @param {Object} payload {id, data, tipo, valor, categoria, descricao}
+ * @return {Object}
+ */
+function uiEditarLancamento(payload) {
+  return _respostaSidebar('uiEditarLancamento', function () {
+    var dados = payload || {};
+    if (!dados.id) throw new Error('Lancamento nao informado.');
+
+    var atualizado = editarLancamento(dados.id, {
+      data: dados.data,
+      tipo: dados.tipo,
+      valor: dados.valor,
+      categoria: dados.categoria,
+      descricao: dados.descricao
+    });
+
+    atualizarDashboard();
+    return {
+      id: atualizado.id_lancamento,
+      texto: formatarData(atualizado.data) + ' - ' + atualizado.tipo + ' - ' +
+             formatarMoeda(paraNumero(atualizado.valor) || 0) + ' - ' +
+             atualizado.categoria
+    };
+  });
+}
+
+/**
+ * Exclui (cancela ou apaga) um lancamento a partir da sidebar.
+ * @param {Object} payload {id, modo: 'SOFT'|'HARD', confirmacao: boolean}
+ * @return {Object}
+ */
+function uiExcluirLancamento(payload) {
+  return _respostaSidebar('uiExcluirLancamento', function () {
+    var dados = payload || {};
+    if (!dados.id) throw new Error('Lancamento nao informado.');
+
+    var resultado = excluirLancamento(dados.id, dados.modo || 'SOFT',
+                                      dados.confirmacao === true);
+    atualizarDashboard();
+    return resultado;
+  });
+}
+
+/**
+ * Reativa um lancamento cancelado (volta para CONFIRMADO).
+ * @param {Object} payload {id}
+ * @return {Object}
+ */
+function uiReativarLancamento(payload) {
+  return _respostaSidebar('uiReativarLancamento', function () {
+    var dados = payload || {};
+    if (!dados.id) throw new Error('Lancamento nao informado.');
+
+    var atualizado = editarLancamento(dados.id, { status: STATUS_LANCAMENTO.CONFIRMADO });
+    atualizarDashboard();
+    return { id: atualizado.id_lancamento, status: atualizado.status };
+  });
+}
+
+/**
+ * Lista as recorrencias para a sidebar.
+ * @return {Object}
+ */
+function uiListarRecorrentes() {
+  return _respostaSidebar('uiListarRecorrentes', function () {
+    return {
+      regras: _recorrentesParaInterface(),
+      comprometimento: _comprometimentoParaInterface()
+    };
+  });
+}
+
+/**
+ * Cria uma recorrencia a partir da sidebar.
+ * @param {Object} payload
+ * @return {Object}
+ */
+function uiCriarRecorrente(payload) {
+  return _respostaSidebar('uiCriarRecorrente', function () {
+    var regra = criarRecorrente(payload);
+    return { id: regra.id_recorrente, resumo: regra.resumo };
+  });
+}
+
+/**
+ * Ativa ou desativa uma recorrencia.
+ * @param {Object} payload {id, ativa}
+ * @return {Object}
+ */
+function uiAlternarRecorrente(payload) {
+  return _respostaSidebar('uiAlternarRecorrente', function () {
+    var dados = payload || {};
+    if (!dados.id) throw new Error('Recorrencia nao informada.');
+
+    var regra = dados.ativa
+      ? ativarRecorrente(dados.id)
+      : desativarRecorrente(dados.id);
+    return { id: regra.id_recorrente, ativa: regra.ativa };
+  });
+}
+
+/**
+ * Exclui uma recorrencia a partir da sidebar.
+ * @param {Object} payload {id, modo}
+ * @return {Object}
+ */
+function uiExcluirRecorrente(payload) {
+  return _respostaSidebar('uiExcluirRecorrente', function () {
+    var dados = payload || {};
+    if (!dados.id) throw new Error('Recorrencia nao informada.');
+    return excluirRecorrente(dados.id, dados.modo || 'SOFT');
+  });
+}
+
+/**
+ * Gera as ocorrencias recorrentes vencidas, sob demanda.
+ * @param {Object=} payload {idRecorrente}
+ * @return {Object}
+ */
+function uiGerarRecorrentes(payload) {
+  return _respostaSidebar('uiGerarRecorrentes', function () {
+    var dados = payload || {};
+    var resultado = gerarLancamentosRecorrentes({ idRecorrente: dados.idRecorrente });
+    if (resultado.criados > 0) atualizarDashboard();
+    return resultado;
   });
 }

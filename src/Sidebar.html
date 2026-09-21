@@ -32,9 +32,9 @@
 
     nav { display: flex; border-bottom: 1px solid var(--borda); background: #f8f9fa; }
     nav button {
-      flex: 1; padding: 8px 4px; border: 0; background: transparent;
-      cursor: pointer; font-size: 12px; color: var(--cinza);
-      border-bottom: 2px solid transparent;
+      flex: 1; padding: 8px 2px; border: 0; background: transparent;
+      cursor: pointer; font-size: 11px; color: var(--cinza);
+      border-bottom: 2px solid transparent; white-space: nowrap;
     }
     nav button.ativo { color: var(--azul); border-bottom-color: var(--azul); font-weight: 600; }
     nav button:hover { background: #eef1f5; }
@@ -119,6 +119,50 @@
 
     .aviso { font-size: 10px; color: var(--cinza); margin-top: 12px; font-style: italic; }
     .vazio { font-size: 12px; color: var(--cinza); font-style: italic; }
+
+    /* --- extrato e recorrencias --- */
+    .item {
+      border: 1px solid var(--borda); border-radius: 6px;
+      padding: 7px 8px; margin-bottom: 6px; background: #fff;
+    }
+    .item.cancelado { opacity: .55; background: #f5f5f5; }
+    .item .cabecalho { display: flex; justify-content: space-between; gap: 6px; }
+    .item .esquerda { min-width: 0; }
+    .item .titulo { font-weight: 600; font-size: 12px; }
+    .item .meta-info { font-size: 11px; color: var(--cinza); margin-top: 2px; }
+    .item .valor { font-weight: 600; font-size: 13px; white-space: nowrap; }
+    .item .valor.receita { color: var(--verde); }
+    .item .valor.despesa { color: var(--vermelho); }
+    .item .botoes { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+
+    button.mini {
+      padding: 3px 8px; font-size: 11px; cursor: pointer;
+      border: 1px solid var(--borda); border-radius: 3px;
+      background: #fff; color: var(--cinza);
+    }
+    button.mini:hover { background: #f1f3f4; }
+    button.mini.perigo { color: var(--vermelho); border-color: #f0b3ae; }
+    button.mini.destaque { color: var(--azul); border-color: var(--azul); }
+
+    .chip {
+      display: inline-block; padding: 1px 6px; border-radius: 10px;
+      font-size: 10px; background: var(--azul-claro); color: var(--azul);
+      margin-left: 4px;
+    }
+    .chip.inativa { background: #eceff1; color: var(--cinza); }
+
+    .caixa-marcacao {
+      display: flex; align-items: center; gap: 6px; margin-top: 10px;
+    }
+    .caixa-marcacao input { width: auto; }
+    .caixa-marcacao label { margin: 0; font-size: 12px; color: #202124; }
+
+    .edicao {
+      border: 1px solid var(--azul); border-radius: 6px;
+      padding: 8px; margin-bottom: 8px; background: #f8fbff;
+    }
+    .filtros { display: flex; gap: 6px; margin-bottom: 8px; }
+    .filtros select { font-size: 12px; padding: 4px; }
   </style>
 </head>
 <body>
@@ -131,9 +175,10 @@
 <nav>
   <button type="button" class="ativo" data-aba="painel">Painel</button>
   <button type="button" data-aba="lancar">Lancar</button>
+  <button type="button" data-aba="extrato">Extrato</button>
   <button type="button" data-aba="metas">Metas</button>
   <button type="button" data-aba="simular">Simular</button>
-  <button type="button" data-aba="sugestoes">Sugestoes</button>
+  <button type="button" data-aba="sugestoes">Dicas</button>
 </nav>
 
 <div class="carregando" id="carregando"><span class="girando"></span>Processando...</div>
@@ -188,9 +233,61 @@
       <label for="lancDescricao">Descricao (opcional)</label>
       <input type="text" id="lancDescricao" maxlength="200">
 
+      <div class="caixa-marcacao">
+        <input type="checkbox" id="lancRepetir">
+        <label for="lancRepetir">Repetir automaticamente</label>
+      </div>
+
+      <div id="blocoFrequencia" style="display:none">
+        <label for="lancFrequencia">A cada</label>
+        <select id="lancFrequencia">
+          <option value="1">1 mes (mensal)</option>
+          <option value="2">2 meses (bimestral)</option>
+          <option value="3">3 meses (trimestral)</option>
+          <option value="6">6 meses (semestral)</option>
+          <option value="12">12 meses (anual)</option>
+        </select>
+        <p class="aviso">
+          O lancamento de hoje e gravado normalmente. A repeticao comeca no
+          proximo periodo e e gerada automaticamente.
+        </p>
+      </div>
+
       <button type="submit" class="acao">Registrar lancamento</button>
       <div class="mensagem" id="msgLancamento"></div>
     </form>
+
+    <h3>Recorrencias ativas</h3>
+    <div id="resumoComprometimento" class="vazio"></div>
+    <div id="listaRecorrentes"></div>
+    <button type="button" class="acao secundario" id="btnGerarRecorrentes">
+      Gerar ocorrencias vencidas
+    </button>
+    <div class="mensagem" id="msgRecorrentes"></div>
+  </section>
+
+  <!-- ================= EXTRATO ================= -->
+  <section id="aba-extrato">
+    <h2>Ultimos lancamentos</h2>
+
+    <div class="filtros">
+      <select id="filtroTipo">
+        <option value="">Todos os tipos</option>
+        <option value="RECEITA">Receitas</option>
+        <option value="DESPESA">Despesas</option>
+        <option value="APORTE_META">Aportes</option>
+        <option value="RESGATE_META">Resgates</option>
+      </select>
+      <select id="filtroLimite">
+        <option value="25">25 ultimos</option>
+        <option value="50">50 ultimos</option>
+        <option value="100">100 ultimos</option>
+      </select>
+    </div>
+
+    <div id="formEdicaoLancamento"></div>
+    <div id="listaExtrato"></div>
+    <div class="mensagem" id="msgExtrato"></div>
   </section>
 
   <!-- ================= METAS ================= -->
@@ -457,6 +554,160 @@ function renderizar(estado) {
   preencherSelecoesDeMeta(estado.metas);
   preencherCategorias();
   renderizarInsights(estado.insights, estado.statusIa);
+  renderizarExtrato(estado.ultimosLancamentos);
+  renderizarRecorrentes(estado.recorrentes, estado.comprometimento);
+}
+
+/* ---------------------------- EXTRATO ---------------------------- */
+
+/** Desenha a lista de lancamentos com os botoes de acao. */
+function renderizarExtrato(lista) {
+  var container = document.getElementById('listaExtrato');
+  if (!lista || !lista.length) {
+    container.innerHTML = '<p class="vazio">Nenhum lancamento no filtro atual.</p>';
+    return;
+  }
+
+  container.innerHTML = lista.map(function (l) {
+    var classeValor = (l.tipo === 'RECEITA') ? 'receita'
+      : (l.tipo === 'DESPESA') ? 'despesa' : '';
+
+    var info = l.data + ' - ' + l.tipo.replace('_', ' ') + ' - ' + escapar(l.categoria);
+    if (l.origem && l.origem.indexOf('RECORRENTE:') === 0) info += ' - recorrente';
+
+    var botoes;
+    if (!l.editavel) {
+      botoes = '<span class="vazio">Movimento de meta: edite pela aba Metas.</span>';
+    } else if (l.cancelado) {
+      botoes =
+        '<button type="button" class="mini destaque" data-acao="reativar" data-id="' +
+        escapar(l.id) + '">Reativar</button>' +
+        '<button type="button" class="mini perigo" data-acao="apagar" data-id="' +
+        escapar(l.id) + '">Apagar de vez</button>';
+    } else {
+      botoes =
+        '<button type="button" class="mini" data-acao="editar" data-id="' +
+        escapar(l.id) + '">Editar</button>' +
+        '<button type="button" class="mini perigo" data-acao="cancelar" data-id="' +
+        escapar(l.id) + '">Cancelar</button>';
+    }
+
+    return '<div class="item' + (l.cancelado ? ' cancelado' : '') + '">' +
+      '<div class="cabecalho"><div class="esquerda">' +
+        '<div class="titulo">' + escapar(l.descricao || l.categoria) +
+        (l.cancelado ? '<span class="chip inativa">cancelado</span>' : '') + '</div>' +
+        '<div class="meta-info">' + info + '</div>' +
+      '</div><div class="valor ' + classeValor + '">' + escapar(l.valor) + '</div></div>' +
+      '<div class="botoes">' + botoes + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+/** Abre o formulario de edicao de um lancamento. */
+function abrirEdicaoLancamento(id) {
+  var lancamento = (estadoAtual && estadoAtual.ultimosLancamentos || [])
+    .filter(function (l) { return l.id === id; })[0];
+  if (!lancamento) {
+    mostrarMensagem('msgExtrato', 'Lancamento nao encontrado na lista atual.', 'erro');
+    return;
+  }
+
+  var categorias = (lancamento.tipo === 'RECEITA')
+    ? estadoAtual.categoriasReceita : estadoAtual.categoriasDespesa;
+
+  document.getElementById('formEdicaoLancamento').innerHTML =
+    '<div class="edicao">' +
+      '<strong style="font-size:12px">Editando lancamento</strong>' +
+      '<label for="edValor">Valor</label>' +
+      '<input type="text" id="edValor" value="' +
+        String(lancamento.valorNumerico).replace('.', ',') + '" inputmode="decimal">' +
+      '<label for="edData">Data</label>' +
+      '<input type="date" id="edData" value="' + escapar(lancamento.dataIso) + '">' +
+      '<label for="edCategoria">Categoria</label>' +
+      '<input list="listaCategoriasEdicao" id="edCategoria" value="' +
+        escapar(lancamento.categoria) + '">' +
+      '<datalist id="listaCategoriasEdicao">' +
+        (categorias || []).map(function (c) {
+          return '<option value="' + escapar(c) + '"></option>';
+        }).join('') +
+      '</datalist>' +
+      '<label for="edDescricao">Descricao</label>' +
+      '<input type="text" id="edDescricao" maxlength="200" value="' +
+        escapar(lancamento.descricao) + '">' +
+      '<div class="botoes" style="margin-top:10px">' +
+        '<button type="button" class="mini destaque" data-acao="salvar" data-id="' +
+          escapar(id) + '">Salvar</button>' +
+        '<button type="button" class="mini" data-acao="fechar">Cancelar edicao</button>' +
+      '</div>' +
+    '</div>';
+
+  document.getElementById('formEdicaoLancamento').scrollIntoView({ block: 'nearest' });
+}
+
+/** Fecha o formulario de edicao. */
+function fecharEdicaoLancamento() {
+  document.getElementById('formEdicaoLancamento').innerHTML = '';
+}
+
+/** Recarrega apenas a lista do extrato, respeitando os filtros. */
+function recarregarExtrato() {
+  chamarServidor('uiListarLancamentos', {
+    tipo: document.getElementById('filtroTipo').value,
+    limite: parseInt(document.getElementById('filtroLimite').value, 10),
+    incluirCancelados: true
+  }, function (lista) {
+    if (estadoAtual) estadoAtual.ultimosLancamentos = lista;
+    renderizarExtrato(lista);
+  }, function (erro) {
+    mostrarMensagem('msgExtrato', erro, 'erro');
+  });
+}
+
+/* ---------------------------- RECORRENCIAS ---------------------------- */
+
+/** Desenha a lista de recorrencias e o comprometimento mensal. */
+function renderizarRecorrentes(regras, comprometimento) {
+  var resumo = document.getElementById('resumoComprometimento');
+  if (comprometimento && comprometimento.quantidade > 0) {
+    resumo.className = '';
+    resumo.innerHTML =
+      '<div class="kpis">' +
+        montarKpi('Despesas fixas', comprometimento.despesas, '') +
+        montarKpi('Sobra prevista', comprometimento.liquido,
+                  comprometimento.liquidoNegativo ? 'negativo' : 'positivo') +
+      '</div>';
+  } else {
+    resumo.className = 'vazio';
+    resumo.textContent = 'Nenhuma recorrencia cadastrada ainda.';
+  }
+
+  var container = document.getElementById('listaRecorrentes');
+  if (!regras || !regras.length) {
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = regras.map(function (r) {
+    var detalhe = r.frequencia + ', dia ' + r.diaDoMes +
+      (r.meta ? ' - meta: ' + escapar(r.meta) : ' - ' + escapar(r.categoria));
+    if (r.proxima) detalhe += '<br>Proxima: ' + escapar(r.proxima);
+    if (r.totalGerado) detalhe += ' - ja geradas: ' + r.totalGerado;
+
+    return '<div class="item' + (r.ativa ? '' : ' cancelado') + '">' +
+      '<div class="cabecalho"><div class="esquerda">' +
+        '<div class="titulo">' + escapar(r.descricao) +
+        (r.ativa ? '' : '<span class="chip inativa">inativa</span>') + '</div>' +
+        '<div class="meta-info">' + detalhe + '</div>' +
+      '</div><div class="valor">' + escapar(r.valor) + '</div></div>' +
+      '<div class="botoes">' +
+        '<button type="button" class="mini" data-acao="alternar-rec" data-id="' +
+          escapar(r.id) + '" data-ativa="' + (r.ativa ? '1' : '0') + '">' +
+          (r.ativa ? 'Desativar' : 'Ativar') + '</button>' +
+        '<button type="button" class="mini perigo" data-acao="excluir-rec" data-id="' +
+          escapar(r.id) + '">Excluir</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
 }
 
 /** Monta o HTML de um cartao de KPI. */
@@ -595,16 +846,33 @@ document.getElementById('formLancamento').addEventListener('submit', function (e
     return;
   }
 
+  var repetir = document.getElementById('lancRepetir').checked;
+
   chamarServidor('uiRegistrarLancamento', {
     tipo: document.getElementById('lancTipo').value,
     valor: valor,
     data: document.getElementById('lancData').value,
     categoria: categoria,
-    descricao: document.getElementById('lancDescricao').value.trim()
+    descricao: document.getElementById('lancDescricao').value.trim(),
+    repetir: repetir,
+    frequencia_meses: parseInt(document.getElementById('lancFrequencia').value, 10)
   }, function (dados) {
-    mostrarMensagem('msgLancamento', 'Registrado: ' + dados.texto, 'ok');
+    var texto = 'Registrado: ' + dados.texto;
+    var tipoMensagem = 'ok';
+
+    if (dados.recorrencia && dados.recorrencia.erro) {
+      // O lancamento entrou; so a regra de repeticao falhou.
+      texto += '\nA repeticao nao pode ser criada: ' + dados.recorrencia.erro;
+      tipoMensagem = 'info';
+    } else if (dados.recorrencia) {
+      texto += '\nRepeticao criada: ' + dados.recorrencia.resumo;
+    }
+
+    mostrarMensagem('msgLancamento', texto, tipoMensagem);
     document.getElementById('lancValor').value = '';
     document.getElementById('lancDescricao').value = '';
+    document.getElementById('lancRepetir').checked = false;
+    document.getElementById('blocoFrequencia').style.display = 'none';
     carregarEstado();
   }, function (erro) {
     mostrarMensagem('msgLancamento', erro, 'erro');
@@ -731,6 +999,152 @@ document.getElementById('formSimulacao').addEventListener('submit', function (ev
     document.getElementById('resultadoSimulacao').innerHTML = html;
   }, function (erro) {
     mostrarMensagem('msgSimulacao', erro, 'erro');
+  });
+});
+
+/* ------------------- LANCAR: repeticao ------------------- */
+
+document.getElementById('lancRepetir').addEventListener('change', function () {
+  document.getElementById('blocoFrequencia').style.display =
+    this.checked ? 'block' : 'none';
+});
+
+document.getElementById('btnGerarRecorrentes').addEventListener('click', function () {
+  limparMensagem('msgRecorrentes');
+  chamarServidor('uiGerarRecorrentes', {}, function (resultado) {
+    mostrarMensagem('msgRecorrentes', resultado.mensagem,
+                    resultado.criados > 0 ? 'ok' : 'info');
+    if (resultado.criados > 0) carregarEstado();
+  }, function (erro) {
+    mostrarMensagem('msgRecorrentes', erro, 'erro');
+  });
+});
+
+/* ------------------- RECORRENCIAS: acoes ------------------- */
+
+document.getElementById('listaRecorrentes').addEventListener('click', function (evento) {
+  var botao = evento.target.closest('button[data-acao]');
+  if (!botao) return;
+  limparMensagem('msgRecorrentes');
+
+  var id = botao.dataset.id;
+  var acao = botao.dataset.acao;
+
+  if (acao === 'alternar-rec') {
+    chamarServidor('uiAlternarRecorrente', {
+      id: id, ativa: botao.dataset.ativa !== '1'
+    }, function () {
+      carregarEstado();
+    }, function (erro) {
+      mostrarMensagem('msgRecorrentes', erro, 'erro');
+    });
+    return;
+  }
+
+  if (acao === 'excluir-rec') {
+    if (!window.confirm('Excluir esta recorrencia?\n\n' +
+        'Os lancamentos ja gerados por ela sao preservados.')) {
+      return;
+    }
+    chamarServidor('uiExcluirRecorrente', { id: id, modo: 'HARD' }, function (r) {
+      mostrarMensagem('msgRecorrentes', r.mensagem, 'ok');
+      carregarEstado();
+    }, function (erro) {
+      mostrarMensagem('msgRecorrentes', erro, 'erro');
+    });
+  }
+});
+
+/* ------------------- EXTRATO: filtros e acoes ------------------- */
+
+document.getElementById('filtroTipo').addEventListener('change', recarregarExtrato);
+document.getElementById('filtroLimite').addEventListener('change', recarregarExtrato);
+
+document.getElementById('listaExtrato').addEventListener('click', function (evento) {
+  var botao = evento.target.closest('button[data-acao]');
+  if (!botao) return;
+  limparMensagem('msgExtrato');
+
+  var id = botao.dataset.id;
+
+  switch (botao.dataset.acao) {
+    case 'editar':
+      abrirEdicaoLancamento(id);
+      break;
+
+    case 'cancelar':
+      if (!window.confirm('Cancelar este lancamento?\n\n' +
+          'Ele sai dos totais, mas a linha continua na planilha.')) {
+        return;
+      }
+      chamarServidor('uiExcluirLancamento', { id: id, modo: 'SOFT' }, function (r) {
+        mostrarMensagem('msgExtrato', r.mensagem, 'ok');
+        carregarEstado();
+      }, function (erro) {
+        mostrarMensagem('msgExtrato', erro, 'erro');
+      });
+      break;
+
+    case 'reativar':
+      chamarServidor('uiReativarLancamento', { id: id }, function () {
+        mostrarMensagem('msgExtrato', 'Lancamento reativado.', 'ok');
+        carregarEstado();
+      }, function (erro) {
+        mostrarMensagem('msgExtrato', erro, 'erro');
+      });
+      break;
+
+    case 'apagar':
+      if (!window.confirm('Apagar a linha DEFINITIVAMENTE?\n\n' +
+          'Esta acao nao pode ser desfeita.')) {
+        return;
+      }
+      chamarServidor('uiExcluirLancamento', {
+        id: id, modo: 'HARD', confirmacao: true
+      }, function (r) {
+        mostrarMensagem('msgExtrato', r.mensagem, 'ok');
+        carregarEstado();
+      }, function (erro) {
+        mostrarMensagem('msgExtrato', erro, 'erro');
+      });
+      break;
+  }
+});
+
+document.getElementById('formEdicaoLancamento').addEventListener('click', function (evento) {
+  var botao = evento.target.closest('button[data-acao]');
+  if (!botao) return;
+
+  if (botao.dataset.acao === 'fechar') {
+    fecharEdicaoLancamento();
+    return;
+  }
+  if (botao.dataset.acao !== 'salvar') return;
+
+  limparMensagem('msgExtrato');
+  var valor = paraNumeroCliente(document.getElementById('edValor').value);
+  if (isNaN(valor) || valor <= 0) {
+    mostrarMensagem('msgExtrato', 'Informe um valor maior que zero.', 'erro');
+    return;
+  }
+  var categoria = document.getElementById('edCategoria').value.trim();
+  if (!categoria) {
+    mostrarMensagem('msgExtrato', 'Informe a categoria.', 'erro');
+    return;
+  }
+
+  chamarServidor('uiEditarLancamento', {
+    id: botao.dataset.id,
+    valor: valor,
+    data: document.getElementById('edData').value,
+    categoria: categoria,
+    descricao: document.getElementById('edDescricao').value.trim()
+  }, function (dados) {
+    mostrarMensagem('msgExtrato', 'Atualizado: ' + dados.texto, 'ok');
+    fecharEdicaoLancamento();
+    carregarEstado();
+  }, function (erro) {
+    mostrarMensagem('msgExtrato', erro, 'erro');
   });
 });
 

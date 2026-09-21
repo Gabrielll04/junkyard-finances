@@ -24,6 +24,9 @@ var CONFIGURACOES_PADRAO = [
   ['criar_categoria_automaticamente', 'SIM', 'SIM cria a categoria automaticamente ao lancar.'],
   ['dias_futuro_permitidos', 370, 'Quantos dias no futuro um lancamento pode ter.'],
   ['dias_alerta_prazo_meta', 60, 'A quantos dias do prazo uma meta entra em alerta.'],
+  ['mostrar_graficos', 'SIM', 'SIM desenha os graficos nativos no painel.'],
+  ['gerar_recorrentes_automaticamente', 'SIM', 'SIM gera os lancamentos recorrentes vencidos na rotina diaria.'],
+  ['max_ocorrencias_por_execucao', 60, 'Teto de lancamentos recorrentes gerados por execucao.'],
   ['valor_alvo_reserva_inicial', 1000, 'Alvo inicial da reserva enquanto nao ha historico de despesas.'],
   ['provedor_ia', 'gemini', 'Provedor de IA: gemini ou groq. (A chave fica nas Script Properties.)'],
   ['modelo_ia', 'gemini-2.0-flash', 'Modelo usado no provedor escolhido.'],
@@ -79,9 +82,9 @@ function setupFinanceiro(opcoes) {
 
       // 1. Abas e cabecalhos.
       var ordem = [
-        ABAS.DASHBOARD, ABAS.METAS, ABAS.LANCAMENTOS, ABAS.METAS_MOVIMENTOS,
-        ABAS.CATEGORIAS, ABAS.ORCAMENTOS, ABAS.SIMULACOES, ABAS.CONFIG,
-        ABAS.IMPORTACAO, ABAS.LOGS, ABAS.README
+        ABAS.DASHBOARD, ABAS.METAS, ABAS.LANCAMENTOS, ABAS.RECORRENTES,
+        ABAS.METAS_MOVIMENTOS, ABAS.CATEGORIAS, ABAS.ORCAMENTOS, ABAS.SIMULACOES,
+        ABAS.CONFIG, ABAS.IMPORTACAO, ABAS.LOGS, ABAS.README
       ];
       ordem.forEach(function (nome) {
         var existia = !!planilha.getSheetByName(nome);
@@ -252,6 +255,11 @@ function aplicarFormatacoes() {
                    campo_calculado_progresso_percentual: '0.0%',
                    campo_calculado_valor_faltante: formatoMoeda,
                    campo_calculado_previsao_meses_restantes: '0' }],
+    [ABAS.RECORRENTES, { valor: formatoMoeda, data_inicio: formatoData,
+                         data_fim: formatoData, ultima_geracao: formatoData,
+                         proxima_geracao: formatoData, dia_do_mes: '0',
+                         frequencia_meses: '0', total_gerado: '0',
+                         criado_em: formatoDataHora, atualizado_em: formatoDataHora }],
     [ABAS.METAS_MOVIMENTOS, { data: formatoData, valor: formatoMoeda,
                               criado_em: formatoDataHora }],
     [ABAS.CATEGORIAS, { orcamento_mensal_padrao: formatoMoeda }],
@@ -294,6 +302,12 @@ function aplicarValidacoesDeDados() {
     [ABAS.LANCAMENTOS, 'status', Object.keys(STATUS_LANCAMENTO)],
     [ABAS.METAS, 'tipo', [TIPOS_META.META, TIPOS_META.RESERVA]],
     [ABAS.METAS, 'status', [STATUS_META.ATIVA, STATUS_META.INATIVA, STATUS_META.CONCLUIDA]],
+    [ABAS.RECORRENTES, 'tipo', TIPOS_RECORRENTE],
+    [ABAS.RECORRENTES, 'ativo', ['SIM', 'NAO']],
+    // A lista precisa ser numerica: a coluna guarda numeros, e strings ali
+    // fariam o Sheets marcar toda linha valida como invalida.
+    [ABAS.RECORRENTES, 'frequencia_meses',
+     Object.keys(FREQUENCIAS_RECORRENTE).map(Number)],
     [ABAS.METAS_MOVIMENTOS, 'tipo_movimento', Object.keys(TIPOS_MOVIMENTO_META)],
     [ABAS.CATEGORIAS, 'tipo_categoria', ['RECEITA', 'DESPESA', 'AMBOS']],
     [ABAS.CATEGORIAS, 'ativa', ['SIM', 'NAO']],
@@ -359,6 +373,7 @@ function escreverInstrucoesReadme() {
     ['   Dashboard ........... painel com KPIs, alertas e sugestoes.'],
     ['   Metas ............... suas caixinhas (metas comuns e a reserva).'],
     ['   Lancamentos ......... extrato completo: receitas, despesas, aportes, resgates.'],
+    ['   Recorrentes ......... regras de lancamento automatico (aluguel, salario, aportes).'],
     ['   Metas_Movimentos .... historico auditavel do saldo de cada meta.'],
     ['   Categorias .......... categorias de receita/despesa e orcamento padrao.'],
     ['   Orcamentos .......... limites mensais por categoria.'],
@@ -377,18 +392,28 @@ function escreverInstrucoesReadme() {
     ['      e modelo_ia com o modelo desejado.'],
     ['   IMPORTANTE: nunca coloque a chave na planilha nem no codigo.'],
     [''],
-    ['5. SALDO DAS METAS'],
+    ['5. LANCAMENTOS RECORRENTES'],
+    ['   Cadastre em Financeiro > Lancamentos > Recorrentes > Nova recorrencia,'],
+    ['   ou marque "repetir" ao lancar pela sidebar.'],
+    ['   O sistema gera as ocorrencias vencidas sozinho (rotina diaria) ou sob'],
+    ['   demanda em "Gerar agora".'],
+    ['   Cada ocorrencia recebe uma chave unica, entao rodar a geracao varias'],
+    ['   vezes nunca duplica lancamento.'],
+    [''],
+    ['6. SALDO DAS METAS'],
     ['   saldo = saldo_inicial + aportes + ajustes positivos'],
     ['           - resgates - ajustes negativos'],
     ['   Aportes e resgates aparecem tambem na aba Lancamentos, mas NAO contam'],
     ['   como receita nem despesa do mes (senao o dinheiro seria contado duas vezes).'],
     [''],
-    ['6. EXCLUSAO DE METAS'],
+    ['7. EXCLUSAO DE METAS E LANCAMENTOS'],
     ['   O padrao e desativar (soft delete): o historico e sempre preservado.'],
     ['   A exclusao definitiva exige confirmacao explicita e mesmo assim mantem'],
     ['   os movimentos e lancamentos na planilha.'],
+    ['   Lancamentos seguem a mesma logica: o padrao e cancelar (sai dos totais,'],
+    ['   a linha fica); apagar de vez exige confirmacao explicita.'],
     [''],
-    ['7. AVISO'],
+    ['8. AVISO'],
     ['   Este sistema e uma ferramenta de organizacao pessoal.'],
     ['   As sugestoes, com ou sem IA, nao constituem aconselhamento financeiro'],
     ['   profissional.'],
@@ -525,6 +550,35 @@ function _criarDadosExemploInterno() {
     logAviso('_criarDadosExemploInterno', 'Aporte de exemplo ignorado', e.message);
   }
 
+  // Uma recorrencia de exemplo, comecando no proximo mes para o usuario ver
+  // a geracao automatica acontecer sem sujar o historico ja criado acima.
+  var temRecorrente = lerTabela(ABAS.RECORRENTES).linhas.some(function (r) {
+    return String(r.observacoes || '').indexOf('EXEMPLO') !== -1;
+  });
+  if (!temRecorrente) {
+    var agoraRec = new Date();
+    var inicioRec = new Date(agoraRec.getFullYear(), agoraRec.getMonth() + 1, 1);
+    adicionarLinha(ABAS.RECORRENTES, {
+      id_recorrente: gerarId(PREFIXOS_ID.RECORRENTE),
+      descricao: 'Aluguel (exemplo)',
+      tipo: 'DESPESA',
+      valor: 1500,
+      categoria: 'Moradia',
+      meta_id: '',
+      dia_do_mes: 10,
+      frequencia_meses: 1,
+      data_inicio: inicioRec,
+      data_fim: '',
+      ativo: 'SIM',
+      ultima_geracao: '',
+      proxima_geracao: new Date(inicioRec.getFullYear(), inicioRec.getMonth(), 10),
+      total_gerado: 0,
+      criado_em: agoraRec,
+      atualizado_em: agoraRec,
+      observacoes: 'EXEMPLO - criada pelo setup; desative ou exclua quando quiser.'
+    });
+  }
+
   // Um orcamento de exemplo.
   var temOrcamento = lerTabela(ABAS.ORCAMENTOS).linhas.length > 0;
   if (!temOrcamento) {
@@ -578,6 +632,38 @@ function removerDadosExemplo() {
       .map(function (l) { return l._linha; })
       .sort(function (a, b) { return b - a; })
       .forEach(function (numero) { abaLancamentos.deleteRow(numero); removidos++; });
+
+    // Recorrencias de exemplo e tudo o que elas geraram.
+    var abaRecorrentes = obterAbaSegura(ABAS.RECORRENTES);
+    var idsRecorrentesExemplo = {};
+    lerTabela(ABAS.RECORRENTES).linhas
+      .filter(function (r) {
+        return String(r.observacoes || '').indexOf('EXEMPLO') !== -1;
+      })
+      .forEach(function (r) {
+        idsRecorrentesExemplo[String(r.id_recorrente || '').trim()] = true;
+      });
+
+    if (Object.keys(idsRecorrentesExemplo).length) {
+      var abaLancamentosRec = obterAbaSegura(ABAS.LANCAMENTOS);
+      lerTabela(ABAS.LANCAMENTOS).linhas
+        .filter(function (l) {
+          var origem = String(l.origem || '');
+          if (origem.indexOf('RECORRENTE:') !== 0) return false;
+          return !!idsRecorrentesExemplo[origem.split(':')[1]];
+        })
+        .map(function (l) { return l._linha; })
+        .sort(function (a, b) { return b - a; })
+        .forEach(function (numero) { abaLancamentosRec.deleteRow(numero); removidos++; });
+
+      lerTabela(ABAS.RECORRENTES).linhas
+        .filter(function (r) {
+          return !!idsRecorrentesExemplo[String(r.id_recorrente || '').trim()];
+        })
+        .map(function (r) { return r._linha; })
+        .sort(function (a, b) { return b - a; })
+        .forEach(function (numero) { abaRecorrentes.deleteRow(numero); removidos++; });
+    }
 
     // Meta de exemplo.
     var metaExemplo = lerTabela(ABAS.METAS).linhas.filter(function (m) {
@@ -743,7 +829,67 @@ function validarDados() {
     if (reservas > 1) avisos.push(reservas + ' metas ativas do tipo RESERVA. ' +
       'O sistema usara a primeira; considere desativar as demais.');
 
-    // 5. Espelhos de meta em Lancamentos.
+    // 5. Recorrencias.
+    var recorrentes = lerTabela(ABAS.RECORRENTES).linhas;
+    var idsRecorrente = {};
+    recorrentes.forEach(function (r) {
+      var referencia = 'linha ' + r._linha + ' de ' + ABAS.RECORRENTES;
+      var id = String(r.id_recorrente || '').trim();
+
+      if (!id) { problemas.push('Recorrencia sem ID na ' + referencia + '.'); }
+      else if (idsRecorrente[id]) {
+        problemas.push('ID de recorrencia duplicado "' + id + '".');
+      } else { idsRecorrente[id] = true; }
+
+      if (!String(r.descricao || '').trim()) {
+        problemas.push('Recorrencia sem descricao na ' + referencia + '.');
+      }
+      var tipoRecorrente = String(r.tipo || '').toUpperCase();
+      if (TIPOS_RECORRENTE.indexOf(tipoRecorrente) === -1) {
+        problemas.push('Tipo invalido "' + r.tipo + '" na ' + referencia + '.');
+      }
+      var valorRecorrente = paraNumero(r.valor);
+      if (isNaN(valorRecorrente) || valorRecorrente <= 0) {
+        problemas.push('Valor invalido de recorrencia na ' + referencia + '.');
+      }
+      var dia = parseInt(paraNumero(r.dia_do_mes), 10);
+      if (isNaN(dia) || dia < 1 || dia > 31) {
+        problemas.push('Dia do mes invalido na ' + referencia + '.');
+      }
+      var frequencia = parseInt(paraNumero(r.frequencia_meses), 10);
+      if (!FREQUENCIAS_RECORRENTE[frequencia]) {
+        problemas.push('Frequencia invalida na ' + referencia + '.');
+      }
+      if (!converterParaData(r.data_inicio)) {
+        problemas.push('Data de inicio invalida na ' + referencia + '.');
+      }
+      var fimRecorrente = converterParaData(r.data_fim);
+      var inicioRecorrente = converterParaData(r.data_inicio);
+      if (fimRecorrente && inicioRecorrente && fimRecorrente < inicioRecorrente) {
+        problemas.push('Data final anterior ao inicio na ' + referencia + '.');
+      }
+      var metaRecorrente = String(r.meta_id || '').trim();
+      if (tipoRecorrente === 'APORTE_META') {
+        if (!metaRecorrente) {
+          problemas.push('Recorrencia de aporte sem meta na ' + referencia + '.');
+        } else if (!metasExistentes[metaRecorrente.toUpperCase()]) {
+          avisos.push('Recorrencia aponta para meta inexistente na ' + referencia + '.');
+        }
+      }
+    });
+
+    // Ocorrencias duplicadas: a chave de origem tem de ser unica.
+    var chavesRecorrencia = {};
+    lancamentos.concat(movimentos).forEach(function (registro) {
+      var origem = String(registro.origem || '');
+      if (origem.indexOf('RECORRENTE:') !== 0) return;
+      if (chavesRecorrencia[origem]) {
+        problemas.push('Ocorrencia recorrente duplicada: ' + origem + '.');
+      }
+      chavesRecorrencia[origem] = true;
+    });
+
+    // 6. Espelhos de meta em Lancamentos.
     var espelhosEsperados = movimentos.filter(function (m) {
       var tipo = String(m.tipo_movimento || '').toUpperCase();
       return tipo === TIPOS_MOVIMENTO_META.APORTE || tipo === TIPOS_MOVIMENTO_META.RESGATE;
@@ -757,7 +903,7 @@ function validarDados() {
         '). O saldo das metas continua correto: ele vem de Metas_Movimentos.');
     }
 
-    // 6. Categorias usadas mas nao cadastradas.
+    // 7. Categorias usadas mas nao cadastradas.
     var categoriasCadastradas = {};
     listarCategorias(false).forEach(function (c) {
       categoriasCadastradas[normalizarTexto(c.nome)] = true;
@@ -775,6 +921,7 @@ function validarDados() {
       lancamentos: lancamentos.length,
       movimentos: movimentos.length,
       metas: metas.length,
+      recorrentes: recorrentes.length,
       categorias: Object.keys(categoriasCadastradas).length
     };
 
@@ -852,6 +999,14 @@ function removerTriggers() {
 /** Rotina executada pelo gatilho diario. Nunca deve lancar excecao. */
 function rotinaDiaria() {
   try {
+    // Gera as ocorrencias recorrentes vencidas ANTES de recalcular, para o
+    // painel do dia ja nascer com elas.
+    if (obterConfigBooleano('gerar_recorrentes_automaticamente', true)) {
+      var geracao = gerarLancamentosRecorrentes();
+      if (geracao.criados > 0) {
+        logInfo('rotinaDiaria', 'Recorrencias geradas', { criados: geracao.criados });
+      }
+    }
     recalcularTudo();
     podarLogs(5000);
     logInfo('rotinaDiaria', 'Rotina diaria concluida');

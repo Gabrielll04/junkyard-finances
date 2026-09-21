@@ -78,15 +78,41 @@ cadastradas, com a IA como desempate.
 
 ## 5.2 Melhorias futuras possíveis
 
+### Já implementado
+
+Os três primeiros itens desta lista saíram do roadmap e estão no sistema:
+
+- **Gráficos nativos no Dashboard** (`Dashboard.gs`) — um gráfico de colunas
+  com receitas x despesas dos 12 meses e uma pizza de despesas por categoria do
+  mês. Os dados ficam nas colunas ocultas `I:N`; os gráficos apontam para
+  intervalos fixos e são criados uma vez só, então atualizar o painel apenas
+  reescreve os números. Liga e desliga em
+  `Configuração → Mostrar/ocultar gráficos`.
+- **Lançamentos recorrentes** (`Recorrentes.gs`, aba `Recorrentes`) — regras
+  com valor, categoria, dia do mês e frequência (mensal a anual), geradas
+  automaticamente na rotina diária ou sob demanda. A geração é idempotente por
+  chave de origem, o dia 31 se encaixa no último dia do mês, e aportes
+  recorrentes passam pelo caminho oficial da meta. Também dá para marcar
+  **"Repetir automaticamente"** direto no formulário da sidebar. Junto veio o
+  indicador de **comprometimento mensal**: quanto da renda já está reservado
+  antes de qualquer gasto novo.
+- **Editar e excluir lançamentos pela sidebar** (aba **Extrato**) — edição
+  inline de valor, data, categoria e descrição; cancelar (reversível, padrão) e
+  apagar de vez (com confirmação). Espelhos de movimento de meta são recusados
+  com uma mensagem que aponta o caminho certo.
+
 **Curto prazo**
-- Gráficos nativos no Dashboard (evolução do saldo, pizza por categoria) via
-  `newChart()`.
-- Lançamentos recorrentes: marcar um lançamento como mensal e gerar as
-  ocorrências automaticamente.
-- Editar e excluir lançamentos pela sidebar (hoje é edição direta na aba ou
-  cancelamento pelo código).
 - Filtro de período no painel (trimestre, ano, intervalo livre).
 - Exportar CSV de um período.
+- Marcar **por lançamento** se ele é recorrente ou pontual. Hoje a distinção
+  vem de dois lugares — o `grupo` da categoria (Fixo/Variável), que é um
+  retrato de perfil e erra no caso isolado, e a aba `Recorrentes`, que é
+  precisa mas só cobre o que foi cadastrado como regra. Uma coluna
+  `recorrente` na aba `Lancamentos` fecharia a lacuna dos gastos que se
+  repetem sem regra formal.
+- Detecção automática de recorrência: varrer o histórico procurando valor
+  semelhante, mesma categoria e mesma descrição repetindo-se mês a mês, e
+  sugerir a criação da regra. Só funciona bem com 3+ meses de dados.
 
 **Médio prazo**
 - Contas/carteiras de verdade: saldo por conta, usando a `TRANSFERENCIA` que já
@@ -94,6 +120,8 @@ cadastradas, com a IA como desempate.
 - Rendimento automático das metas: gatilho mensal aplicando a taxa como
   `AJUSTE_POSITIVO`, mantendo tudo auditável.
 - Metas com aportes escalonados (aumentar o aporte a cada N meses).
+- Recorrências com valor variável (reajuste anual do aluguel, por exemplo) e
+  com parcelamento (12x de R$ 300, encerrando sozinha ao fim das parcelas).
 - Orçamento por grupo, não só por categoria.
 - Comparativo ano a ano.
 - Alertas por e-mail com `MailApp` quando um orçamento estourar ou uma meta
@@ -116,6 +144,12 @@ cadastradas, com a IA como desempate.
 - **Sem histórico de alterações.** `Logs` registra a operação, mas não guarda o
   valor anterior de cada campo editado.
 - **`Simulacoes` cresce indefinidamente.** Falta uma poda como a de `Logs`.
+- **Editar uma recorrência não afeta o que já foi gerado.** É intencional —
+  o histórico é real —, mas quem aumenta o valor do aluguel pode esperar que as
+  ocorrências passadas mudem junto. Elas não mudam.
+- **Os gráficos são recriados se alguém os apagar à mão**, mas não se o usuário
+  apenas movê-los ou redimensioná-los: nesse caso o layout personalizado é
+  respeitado e o sistema não interfere.
 - **Conversão de moeda não existe.** Mudar `moeda` troca o símbolo e o formato,
   não converte valores já lançados.
 - **O cache de insights não é por mês.** Trocar o mês de referência pode exibir

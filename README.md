@@ -26,15 +26,16 @@ ele gera sugestões por regras internas.
 | `src/appsscript.json` | Manifesto (runtime V8, fuso `America/Sao_Paulo`). |
 | `src/Repositorio.gs` | Acesso ao Sheets: abas, cabeçalhos, leitura/escrita em lote, IDs, cache, lock, formatação, log. |
 | `src/Setup.gs` | Instalação, abas, categorias e configurações padrão, formatos, validações, dados de exemplo, integridade, triggers, backup. |
-| `src/Financeiro.gs` | Lançamentos (receita, despesa, aporte, resgate, transferência) e categorias. |
+| `src/Financeiro.gs` | Lançamentos (receita, despesa, aporte, resgate, transferência), edição, exclusão e categorias. |
+| `src/Recorrentes.gs` | Lançamentos recorrentes: regras, geração idempotente e comprometimento mensal. |
 | `src/Metas.gs` | CRUD de metas, aportes, resgates, ajustes, saldos e campos calculados. |
 | `src/Previsoes.gs` | Matemática financeira pura: valor futuro, prazo, aporte necessário, taxas, simulações. |
 | `src/Indicadores.gs` | KPIs, médias, orçamentos, alertas e sugestões por regras. |
-| `src/Dashboard.gs` | Montagem e atualização da aba Dashboard (fórmulas nativas + valores calculados). |
+| `src/Dashboard.gs` | Montagem e atualização da aba Dashboard (fórmulas nativas + valores calculados + gráficos). |
 | `src/IA.gs` | Integração opcional com Gemini/Groq, cache, retry, parsing tolerante e fallback. |
 | `src/UI.gs` | Menu personalizado, diálogos nativos e funções expostas à sidebar. |
 | `src/Sidebar.html` | Interface HTML embutida (CSS + JS inline, sem dependências externas). |
-| `src/Testes.gs` | 12 funções de teste + execução em bateria, com limpeza automática. |
+| `src/Testes.gs` | 14 funções de teste + execução em bateria, com limpeza automática. |
 | `src/ImportacaoFutura.gs` | Estrutura e stubs para importação de holerites/comprovantes. |
 
 ## Início rápido

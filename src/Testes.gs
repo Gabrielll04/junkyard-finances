@@ -38,6 +38,7 @@ function _novoContextoTeste(nome) {
     metasCriadas: [],
     lancamentosCriados: [],
     movimentosCriados: [],
+    recorrentesCriadas: [],
 
     /** Afirma que uma condicao e verdadeira. */
     afirmar: function (condicao, descricao) {
@@ -80,12 +81,15 @@ function _novoContextoTeste(nome) {
     limpar: function () {
       var contexto = this;
       try {
+        // Ocorrencias geradas por recorrencias de teste, em ambas as abas.
+        _removerPorOrigemRecorrente(contexto.recorrentesCriadas);
         // Movimentos primeiro, depois lancamentos, depois metas.
         _removerLinhasPorIds(ABAS.METAS_MOVIMENTOS, 'id_movimento', contexto.movimentosCriados);
         _removerLinhasPorIds(ABAS.LANCAMENTOS, 'id_lancamento', contexto.lancamentosCriados);
         // Lancamentos espelho gerados pelos aportes de teste.
         _removerLancamentosEspelhoOrfaos();
         _removerLinhasPorIds(ABAS.METAS, 'id_meta', contexto.metasCriadas);
+        _removerLinhasPorIds(ABAS.RECORRENTES, 'id_recorrente', contexto.recorrentesCriadas);
         limparCache();
       } catch (e) {
         logErro('_novoContextoTeste.limpar',
@@ -117,6 +121,33 @@ function _removerLinhasPorIds(nomeAba, colunaId, ids) {
     .map(function (linha) { return linha._linha; })
     .sort(function (a, b) { return b - a; })
     .forEach(function (numero) { aba.deleteRow(numero); });
+}
+
+/**
+ * Remove tudo o que foi gerado por um conjunto de recorrencias de teste.
+ * Varre Lancamentos e Metas_Movimentos procurando a chave RECORRENTE:<id>:...
+ * @param {Array<string>} ids
+ * @private
+ */
+function _removerPorOrigemRecorrente(ids) {
+  if (!ids || !ids.length) return;
+  var conjunto = {};
+  ids.forEach(function (id) {
+    if (id) conjunto[String(id).trim()] = true;
+  });
+
+  [ABAS.LANCAMENTOS, ABAS.METAS_MOVIMENTOS].forEach(function (nomeAba) {
+    var aba = obterAbaSegura(nomeAba);
+    lerTabela(nomeAba).linhas
+      .filter(function (linha) {
+        var origem = String(linha.origem || '');
+        if (origem.indexOf('RECORRENTE:') !== 0) return false;
+        return !!conjunto[origem.split(':')[1]];
+      })
+      .map(function (linha) { return linha._linha; })
+      .sort(function (a, b) { return b - a; })
+      .forEach(function (numero) { aba.deleteRow(numero); });
+  });
 }
 
 /**
@@ -426,6 +457,267 @@ function testRegistrarReceita() {
     var atalho = registrarReceita(new Date(), 55.5, 'Freelance', 'Receita de teste 3');
     t.lancamentosCriados.push(atalho.id_lancamento);
     t.afirmarIgual(atalho.tipo, TIPOS_LANCAMENTO.RECEITA, 'atalho deve criar RECEITA');
+  });
+}
+
+/** Testa edicao, cancelamento e exclusao de lancamentos. */
+function testEditarExcluirLancamento() {
+  return _executarTeste('testEditarExcluirLancamento', function (t) {
+    var mes = chaveMes(new Date());
+
+    var lancamento = registrarLancamento({
+      data: new Date(), tipo: TIPOS_LANCAMENTO.DESPESA, valor: 200,
+      categoria: 'Lazer', descricao: 'Editar teste', origem: MARCADOR_TESTE
+    });
+    t.lancamentosCriados.push(lancamento.id_lancamento);
+    var totalAntes = somarPorTipoNoMes(TIPOS_LANCAMENTO.DESPESA, mes);
+
+    // --- edicao ------------------------------------------------------------
+    var editado = editarLancamento(lancamento.id_lancamento, {
+      valor: 350, categoria: 'Mercado', descricao: 'Editado no teste'
+    });
+    t.afirmarProximo(paraNumero(editado.valor), 350, 'valor editado');
+    t.afirmarIgual(editado.categoria, 'Mercado', 'categoria editada');
+    t.afirmarIgual(editado.descricao, 'Editado no teste', 'descricao editada');
+    t.afirmarIgual(editado.id_lancamento, lancamento.id_lancamento, 'ID preservado');
+    t.afirmarProximo(somarPorTipoNoMes(TIPOS_LANCAMENTO.DESPESA, mes),
+                     totalAntes + 150, 'total do mes reflete a edicao');
+
+    // --- validacoes da edicao ----------------------------------------------
+    t.afirmarErro(function () {
+      editarLancamento(lancamento.id_lancamento, { data: 'nao-e-data' });
+    }, 'data invalida na edicao deve ser rejeitada');
+
+    t.afirmarErro(function () {
+      editarLancamento(lancamento.id_lancamento, { valor: -5 });
+    }, 'valor negativo na edicao deve ser rejeitado');
+
+    t.afirmarErro(function () {
+      editarLancamento(lancamento.id_lancamento, { tipo: TIPOS_LANCAMENTO.APORTE_META });
+    }, 'converter lancamento comum em APORTE_META deve ser rejeitado');
+
+    t.afirmarErro(function () {
+      editarLancamento('LAN-INEXISTENTE', { valor: 10 });
+    }, 'editar lancamento inexistente deve ser rejeitado');
+
+    // --- exclusao soft e reativacao ----------------------------------------
+    var soft = excluirLancamento(lancamento.id_lancamento, 'SOFT');
+    t.afirmarIgual(soft.modo, 'SOFT', 'exclusao padrao deve ser soft');
+    t.afirmarIgual(
+      String(obterLancamento(lancamento.id_lancamento).status).toUpperCase(),
+      STATUS_LANCAMENTO.CANCELADO, 'lancamento deve ficar CANCELADO');
+    t.afirmar(!!obterLancamento(lancamento.id_lancamento),
+              'a linha deve continuar existindo apos o soft delete');
+
+    editarLancamento(lancamento.id_lancamento, { status: STATUS_LANCAMENTO.CONFIRMADO });
+    t.afirmarIgual(
+      String(obterLancamento(lancamento.id_lancamento).status).toUpperCase(),
+      STATUS_LANCAMENTO.CONFIRMADO, 'lancamento deve poder ser reativado');
+
+    // --- espelho de meta e intocavel ---------------------------------------
+    var meta = _criarMetaDeTeste(t, { valor_alvo: 5000 });
+    var aporte = aportarEmMeta(meta.id_meta, 120, new Date(), 'Espelho teste', MARCADOR_TESTE);
+    t.movimentosCriados.push(aporte.id_movimento);
+    if (aporte.id_lancamento) t.lancamentosCriados.push(aporte.id_lancamento);
+
+    t.afirmarErro(function () {
+      editarLancamento(aporte.id_lancamento, { valor: 999 });
+    }, 'espelho de meta nao pode ser editado');
+    t.afirmarErro(function () {
+      excluirLancamento(aporte.id_lancamento, 'SOFT');
+    }, 'espelho de meta nao pode ser excluido');
+    t.afirmarProximo(calcularSaldoMeta(meta.id_meta), 120,
+                     'saldo da meta intacto apos as tentativas recusadas');
+
+    // --- exclusao definitiva -----------------------------------------------
+    t.afirmarErro(function () {
+      excluirLancamento(lancamento.id_lancamento, 'HARD');
+    }, 'exclusao definitiva sem confirmacao deve ser rejeitada');
+
+    var hard = excluirLancamento(lancamento.id_lancamento, 'HARD', true);
+    t.afirmarIgual(hard.modo, 'HARD', 'modo da exclusao definitiva');
+    t.afirmar(!obterLancamento(lancamento.id_lancamento),
+              'linha deve sumir apos a exclusao definitiva');
+  });
+}
+
+/** Testa o ciclo completo dos lancamentos recorrentes. */
+function testRecorrentes() {
+  return _executarTeste('testRecorrentes', function (t) {
+    var hoje = new Date();
+    // Inicio no dia 1 de tres meses atras, ocorrencia todo dia 1: o dia 1 do
+    // mes corrente ja passou (ou e hoje), entao o numero de ocorrencias
+    // vencidas e sempre exatamente 4. Teste deterministico em qualquer data.
+    var inicio = new Date(hoje.getFullYear(), hoje.getMonth() - 3, 1);
+
+    var regra = criarRecorrente({
+      descricao: PREFIXO_NOME_TESTE + 'Assinatura recorrente',
+      tipo: 'DESPESA',
+      valor: 77.77,
+      categoria: 'Assinaturas',
+      dia_do_mes: 1,
+      frequencia_meses: 1,
+      data_inicio: inicio
+    });
+    t.recorrentesCriadas.push(regra.id_recorrente);
+
+    t.afirmar(!!regra.id_recorrente, 'recorrencia criada deve ter ID');
+    t.afirmar(regra.ativa, 'recorrencia nova deve nascer ativa');
+    t.afirmarIgual(regra.frequenciaTexto, 'Mensal', 'frequencia 1 = Mensal');
+
+    // --- primeira geracao ---------------------------------------------------
+    var mesCorrente = chaveMes(hoje);
+    var despesasAntes = somarPorTipoNoMes(TIPOS_LANCAMENTO.DESPESA, mesCorrente);
+
+    var geracao = gerarLancamentosRecorrentes({ idRecorrente: regra.id_recorrente });
+    t.afirmarIgual(geracao.criados, 4, 'devem ser geradas 4 ocorrencias vencidas');
+    t.afirmarIgual(geracao.erros.length, 0, 'geracao nao deve acumular erros');
+    t.afirmarProximo(somarPorTipoNoMes(TIPOS_LANCAMENTO.DESPESA, mesCorrente),
+                     despesasAntes + 77.77,
+                     'apenas a ocorrencia do mes corrente entra no total do mes');
+
+    // --- idempotencia -------------------------------------------------------
+    var segunda = gerarLancamentosRecorrentes({ idRecorrente: regra.id_recorrente });
+    t.afirmarIgual(segunda.criados, 0, 'rodar de novo nao pode criar nada');
+    t.afirmarIgual(segunda.pulados, 4, 'as 4 ocorrencias devem ser reconhecidas');
+    t.afirmarProximo(somarPorTipoNoMes(TIPOS_LANCAMENTO.DESPESA, mesCorrente),
+                     despesasAntes + 77.77, 'total do mes nao pode dobrar');
+
+    var atualizada = obterRecorrente(regra.id_recorrente);
+    t.afirmarIgual(paraNumero(atualizada.total_gerado), 4, 'contador de geradas');
+    t.afirmar(!!converterParaData(atualizada.proxima_geracao),
+              'proxima ocorrencia deve estar preenchida');
+    t.afirmar(converterParaData(atualizada.proxima_geracao) > hoje,
+              'proxima ocorrencia deve estar no futuro');
+
+    // --- chave de origem ----------------------------------------------------
+    var gerados = listarLancamentos({ limite: 200 }).filter(function (l) {
+      return String(l.origem || '').indexOf('RECORRENTE:' + regra.id_recorrente) === 0;
+    });
+    t.afirmarIgual(gerados.length, 4, 'todas as ocorrencias carregam a chave de origem');
+    var chaves = {};
+    gerados.forEach(function (l) { chaves[String(l.origem)] = true; });
+    t.afirmarIgual(Object.keys(chaves).length, 4, 'as chaves de origem sao unicas');
+
+    // --- desativacao --------------------------------------------------------
+    desativarRecorrente(regra.id_recorrente);
+    t.afirmar(!obterRecorrente(regra.id_recorrente).ativa, 'recorrencia deve ficar inativa');
+    t.afirmar(listarRecorrentes(false).every(function (r) {
+      return r.id_recorrente !== regra.id_recorrente;
+    }), 'inativa nao aparece na listagem padrao');
+    t.afirmarIgual(gerarLancamentosRecorrentes({ idRecorrente: regra.id_recorrente }).criados,
+                   0, 'recorrencia inativa nao gera nada');
+
+    ativarRecorrente(regra.id_recorrente);
+    t.afirmar(obterRecorrente(regra.id_recorrente).ativa, 'recorrencia deve poder voltar');
+
+    // --- validacoes ---------------------------------------------------------
+    t.afirmarErro(function () {
+      criarRecorrente({ descricao: '', tipo: 'DESPESA', valor: 10 });
+    }, 'recorrencia sem descricao deve ser rejeitada');
+
+    t.afirmarErro(function () {
+      criarRecorrente({ descricao: 'X', tipo: 'INVENTADO', valor: 10 });
+    }, 'tipo invalido deve ser rejeitado');
+
+    t.afirmarErro(function () {
+      criarRecorrente({ descricao: 'X', tipo: 'DESPESA', valor: 0 });
+    }, 'valor zero deve ser rejeitado');
+
+    t.afirmarErro(function () {
+      criarRecorrente({ descricao: 'X', tipo: 'DESPESA', valor: 10, frequencia_meses: 5 });
+    }, 'frequencia fora da lista deve ser rejeitada');
+
+    t.afirmarErro(function () {
+      criarRecorrente({ descricao: 'X', tipo: 'APORTE_META', valor: 10 });
+    }, 'recorrencia de aporte sem meta deve ser rejeitada');
+
+    t.afirmarErro(function () {
+      criarRecorrente({
+        descricao: 'X', tipo: 'DESPESA', valor: 10,
+        data_inicio: new Date(2030, 0, 1), data_fim: new Date(2029, 0, 1)
+      });
+    }, 'data final anterior ao inicio deve ser rejeitada');
+
+    // --- dia 31 em mes curto ------------------------------------------------
+    t.afirmarIgual(_dataDaOcorrencia(2024, 1, 31).getDate(), 29,
+                   'dia 31 em fevereiro bissexto vira 29');
+    t.afirmarIgual(_dataDaOcorrencia(2023, 1, 31).getDate(), 28,
+                   'dia 31 em fevereiro comum vira 28');
+    t.afirmarIgual(_dataDaOcorrencia(2024, 3, 31).getDate(), 30,
+                   'dia 31 em abril vira 30');
+    t.afirmarIgual(_dataDaOcorrencia(2024, 0, 15).getDate(), 15,
+                   'dia normal permanece');
+
+    // --- data final limita a geracao ---------------------------------------
+    var comFim = criarRecorrente({
+      descricao: PREFIXO_NOME_TESTE + 'Curta duracao',
+      tipo: 'DESPESA', valor: 12.34, categoria: 'Outros',
+      dia_do_mes: 1, frequencia_meses: 1,
+      data_inicio: new Date(hoje.getFullYear(), hoje.getMonth() - 3, 1),
+      data_fim: new Date(hoje.getFullYear(), hoje.getMonth() - 2, 15)
+    });
+    t.recorrentesCriadas.push(comFim.id_recorrente);
+
+    var limitada = gerarLancamentosRecorrentes({ idRecorrente: comFim.id_recorrente });
+    t.afirmarIgual(limitada.criados, 2, 'data final corta a geracao em 2 ocorrencias');
+    t.afirmarIgual(String(obterRecorrente(comFim.id_recorrente).proxima_geracao), '',
+                   'sem proxima ocorrencia depois da data final');
+
+    // --- frequencia trimestral ---------------------------------------------
+    var trimestral = criarRecorrente({
+      descricao: PREFIXO_NOME_TESTE + 'Trimestral',
+      tipo: 'RECEITA', valor: 500, categoria: 'Freelance',
+      dia_do_mes: 1, frequencia_meses: 3,
+      data_inicio: new Date(hoje.getFullYear(), hoje.getMonth() - 3, 1)
+    });
+    t.recorrentesCriadas.push(trimestral.id_recorrente);
+    t.afirmarIgual(
+      gerarLancamentosRecorrentes({ idRecorrente: trimestral.id_recorrente }).criados, 2,
+      'trimestral em 3 meses gera 2 ocorrencias');
+
+    // --- aporte recorrente vai para Metas_Movimentos -----------------------
+    var meta = _criarMetaDeTeste(t, { valor_alvo: 10000 });
+    var aporteRecorrente = criarRecorrente({
+      descricao: PREFIXO_NOME_TESTE + 'Aporte mensal',
+      tipo: 'APORTE_META', valor: 150, meta_id: meta.id_meta,
+      dia_do_mes: 1, frequencia_meses: 1,
+      data_inicio: new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)
+    });
+    t.recorrentesCriadas.push(aporteRecorrente.id_recorrente);
+
+    var geracaoAporte = gerarLancamentosRecorrentes({
+      idRecorrente: aporteRecorrente.id_recorrente
+    });
+    t.afirmarIgual(geracaoAporte.criados, 2, 'aporte recorrente gera 2 ocorrencias');
+    t.afirmarProximo(calcularSaldoMeta(meta.id_meta), 300,
+                     'aportes recorrentes entram no saldo da meta');
+
+    var movimentos = lerTabela(ABAS.METAS_MOVIMENTOS).linhas.filter(function (m) {
+      return String(m.origem || '').indexOf('RECORRENTE:' + aporteRecorrente.id_recorrente) === 0;
+    });
+    t.afirmarIgual(movimentos.length, 2,
+                   'aporte recorrente grava em Metas_Movimentos, nao so no extrato');
+
+    // --- comprometimento mensal --------------------------------------------
+    var comprometimento = calcularComprometimentoMensal();
+    t.afirmar(comprometimento.despesas > 0, 'comprometimento deve somar despesas fixas');
+    t.afirmar(comprometimento.quantidade >= 4, 'deve contar as regras ativas');
+    // Trimestral de 500 conta como ~166,67/mes no equivalente mensal.
+    t.afirmar(comprometimento.receitas >= 166,
+              'frequencia maior que 1 e normalizada para o equivalente mensal');
+
+    // --- exclusao preserva o historico -------------------------------------
+    var totalGeradoAntes = listarLancamentos({ limite: 200 }).filter(function (l) {
+      return String(l.origem || '').indexOf('RECORRENTE:' + regra.id_recorrente) === 0;
+    }).length;
+
+    excluirRecorrente(regra.id_recorrente, 'HARD');
+    t.afirmar(!obterRecorrente(regra.id_recorrente), 'regra removida');
+    t.afirmarIgual(listarLancamentos({ limite: 200 }).filter(function (l) {
+      return String(l.origem || '').indexOf('RECORRENTE:' + regra.id_recorrente) === 0;
+    }).length, totalGeradoAntes,
+      'lancamentos ja gerados sobrevivem a exclusao da regra');
   });
 }
 
@@ -787,8 +1079,10 @@ function executarTodosOsTestes() {
     testCriarMeta,
     testRegistrarDespesa,
     testRegistrarReceita,
+    testEditarExcluirLancamento,
     testAporteMeta,
     testResgateMeta,
+    testRecorrentes,
     testIndicadores,
     testFallbackIA,
     testIntegridadeDados

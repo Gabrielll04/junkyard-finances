@@ -9,7 +9,7 @@
 4. Crie um arquivo para cada `.gs` de `src/` (ícone **+ → Script**) usando
    exatamente estes nomes, sem a extensão:
 
-   `Repositorio`, `Setup`, `Financeiro`, `Metas`, `Previsoes`,
+   `Repositorio`, `Setup`, `Financeiro`, `Recorrentes`, `Metas`, `Previsoes`,
    `Indicadores`, `Dashboard`, `IA`, `UI`, `Testes`, `ImportacaoFutura`
 
    Cole o conteúdo do arquivo correspondente em cada um.
@@ -34,7 +34,7 @@
 3. Volte para a planilha e **recarregue a página**. O menu **Financeiro** aparece.
 
 O que o setup faz (é idempotente — pode rodar quantas vezes quiser):
-cria as 11 abas com cabeçalhos, 24 configurações padrão, 17 categorias,
+cria as 12 abas com cabeçalhos, 27 configurações padrão, 17 categorias,
 formatos de data/moeda/percentual, listas suspensas nas colunas de domínio
 fechado, a meta **Reserva de Emergência**, o layout do painel e a aba README.
 
@@ -88,6 +88,14 @@ Financeiro
 ├── Atualizar painel                  recalcula a aba Dashboard
 ├── Registrar receita
 ├── Registrar despesa
+├── Lancamentos ▸
+│   ├── Registrar receita / Registrar despesa
+│   ├── Ver ultimos lancamentos
+│   ├── Editar lancamento / Excluir lancamento
+│   └── Recorrentes ▸
+│       ├── Nova recorrencia / Ver recorrencias
+│       ├── Gerar agora
+│       └── Ativar-desativar / Excluir recorrencia
 ├── Metas ▸
 │   ├── Nova meta / Ver metas / Editar meta
 │   ├── Aportar em meta / Resgatar de meta
@@ -102,6 +110,7 @@ Financeiro
 ├── Configuracao ▸
 │   ├── Executar setup
 │   ├── Reaplicar formatos e validacoes
+│   ├── Mostrar/ocultar graficos
 │   ├── Status da IA / Configurar IA / Testar conexao
 │   └── Instalar / Remover atualizacao diaria
 └── Dados ▸
@@ -113,18 +122,25 @@ Financeiro
 
 ## 3.5 A sidebar
 
-**Financeiro → Abrir painel**. Cinco abas, sem nenhuma dependência externa:
+**Financeiro → Abrir painel**. Seis abas, sem nenhuma dependência externa:
 
 - **Painel** — KPIs do mês, barra de progresso da reserva, maiores gastos,
   alertas; botões para recarregar e para atualizar a aba Dashboard.
 - **Lançar** — formulário rápido de receita/despesa, com autocompletar de
-  categoria conforme o tipo.
+  categoria conforme o tipo, caixa **"Repetir automaticamente"** (cria a
+  recorrência a partir do que acabou de ser lançado), lista das recorrências
+  ativas com o comprometimento mensal, e botão para gerar as ocorrências
+  vencidas na hora.
+- **Extrato** — últimos lançamentos com filtro por tipo e quantidade. Cada
+  linha traz **Editar** (formulário inline de valor, data, categoria e
+  descrição) e **Cancelar**; lançamentos cancelados mostram **Reativar** e
+  **Apagar de vez**. Movimentos de meta aparecem marcados como somente leitura.
 - **Metas** — lista com barras de progresso, formulário de aporte/resgate e
   formulário de nova meta.
 - **Simular** — escolhe a meta, informa um aporte alternativo e um horizonte;
   mostra prazo atual, cenário simulado, comparativo e aporte necessário para o
   prazo declarado.
-- **Sugestões** — status da IA, resumo, sugestões priorizadas e o aviso legal.
+- **Dicas** — status da IA, resumo, sugestões priorizadas e o aviso legal.
 
 Toda validação acontece **duas vezes**: no cliente (retorno imediato) e no
 servidor (fonte da verdade). O indicador de carregamento aparece em qualquer
@@ -141,9 +157,28 @@ chamada e os erros voltam em texto legível.
    - `taxa_mensal_padrao` — decimal, `0.008` = 0,8% ao mês; deixe `0` se não
      quiser considerar rendimento.
 5. Crie suas metas e registre os lançamentos do mês.
-6. `Metas → Recalcular alvo da reserva` depois de alguns meses de histórico.
-7. Opcional: `Configuração → Instalar atualização diária` para o painel se
-   atualizar sozinho por volta das 7h.
+6. Cadastre o que se repete todo mês (aluguel, salário, assinaturas) em
+   `Lançamentos → Recorrentes → Nova recorrência`, ou marque **"Repetir
+   automaticamente"** ao lançar pela sidebar.
+7. `Metas → Recalcular alvo da reserva` depois de alguns meses de histórico.
+8. Opcional: `Configuração → Instalar atualização diária` — o painel se atualiza
+   sozinho por volta das 7h **e as recorrências vencidas são geradas
+   automaticamente**. Sem o gatilho, use `Recorrentes → Gerar agora` quando
+   quiser.
+
+## 3.6.1 Gastos recorrentes vs. pontuais
+
+Há duas leituras diferentes, e vale saber qual usar:
+
+- **Por categoria** (já existia): a coluna `grupo` da aba `Categorias`
+  classifica cada categoria como `Fixo` ou `Variavel`, e o painel mostra
+  *"X% fixos"*. É um retrato do perfil de gasto, mas erra no caso isolado —
+  um conserto lançado em Moradia conta como fixo.
+- **Por recorrência** (novo): a aba `Recorrentes` diz exatamente o que se
+  repete, com valor e frequência. `Ver recorrências` mostra o
+  **comprometimento mensal** — quanto da sua renda já está reservado antes de
+  qualquer gasto novo —, normalizando frequências diferentes para o
+  equivalente mensal (uma anual de R$ 1.200 conta como R$ 100/mês).
 
 ## 3.7 Configurações da aba `Config`
 
@@ -162,6 +197,9 @@ chamada e os erros voltam em texto legível.
 | `criar_categoria_automaticamente` | `SIM` | Cria a categoria ao lançar. |
 | `dias_futuro_permitidos` | `370` | Limite de data futura. |
 | `dias_alerta_prazo_meta` | `60` | Antecedência do alerta de prazo. |
+| `mostrar_graficos` | `SIM` | Desenha os gráficos nativos no painel. |
+| `gerar_recorrentes_automaticamente` | `SIM` | Gera as recorrências vencidas na rotina diária. |
+| `max_ocorrencias_por_execucao` | `60` | Teto de lançamentos recorrentes por execução. |
 | `provedor_ia` | `gemini` | `gemini` ou `groq`. |
 | `modelo_ia` | `gemini-2.0-flash` | Modelo do provedor. |
 | `usar_ia` | `NAO` | Liga as sugestões por IA. |
@@ -182,3 +220,6 @@ chamada e os erros voltam em texto legível.
 | "Lançamento parece duplicado" | Proteção contra clique duplo. Mude a descrição, ou desligue `bloquear_duplicados`. |
 | Backup falha | Falta a permissão de Drive. Rode `exportarBackup` uma vez pelo editor e autorize. |
 | Valores do painel zerados | O mês em `F2` do Dashboard está diferente do mês dos lançamentos. |
+| Gráficos não aparecem | `mostrar_graficos` está `NAO`, ou o painel ainda não foi atualizado. Use `Configuração → Mostrar/ocultar gráficos`. |
+| "Este lançamento é o espelho de um movimento de meta" | Aportes e resgates se editam pela meta, não pelo extrato. Registre um movimento compensatório. |
+| Recorrência não gerou nada | Ela está inativa, a data de início é futura, a data final já passou, ou as ocorrências já foram geradas antes. |

@@ -9,6 +9,8 @@
 Os testes rodam na sua planilha real, mas:
 
 - tudo o que criam é marcado com origem `TESTE` e nome prefixado `[TESTE]`;
+- as ocorrências geradas por recorrências de teste são varridas pela chave
+  `RECORRENTE:<id>` nas duas abas onde podem cair;
 - cada teste registra o que criou e remove ao final;
 - a limpeza roda dentro de um bloco `finally`, então **acontece mesmo quando o
   teste falha**;
@@ -17,7 +19,7 @@ Os testes rodam na sua planilha real, mas:
 Ainda assim, rode os testes antes de acumular meses de dados reais, ou faça um
 backup por `Dados → Backup / exportar`.
 
-## 4.2 As 12 funções de teste
+## 4.2 As 14 funções de teste
 
 | Função | O que valida |
 |---|---|
@@ -28,6 +30,8 @@ backup por `Dados → Backup / exportar`.
 | `testCriarMeta` | Criação, campos calculados iniciais, rejeição de nome vazio / alvo zero / nome duplicado, edição, desativar→listagem→reativar, `excluirMeta` padrão = soft delete. |
 | `testRegistrarDespesa` | Conversão `"123,45"`, status padrão, soma do mês, bloqueio de duplicado, rejeição de data/tipo/valor inválidos, `APORTE_META` sem meta, cancelamento sai dos totais mas a linha fica. |
 | `testRegistrarReceita` | Soma do mês, normalização de categoria (`salario` → `Salario`), atalho `registrarReceita`. |
+| `testEditarExcluirLancamento` | Edição de valor/categoria/descrição com ID preservado e total do mês recalculado; rejeição de data inválida, valor negativo, conversão para `APORTE_META` e ID inexistente; cancelar → reativar; espelho de meta recusa edição **e** exclusão, com saldo intacto; `HARD` sem confirmação é recusado, com confirmação apaga a linha. |
+| `testRecorrentes` | Criação; geração de exatamente 4 ocorrências vencidas; **idempotência** (segunda execução cria 0 e pula 4); total do mês não dobra; chaves de origem únicas; contador e próxima ocorrência; desativar/reativar; validações (descrição, tipo, valor, frequência, aporte sem meta, data final < início); dia 31 em fevereiro/abril; data final corta a geração; frequência trimestral; aporte recorrente grava em `Metas_Movimentos` e entra no saldo; comprometimento mensal normalizado; exclusão da regra preserva os lançamentos gerados. |
 | `testAporteMeta` | Saldo e progresso após aporte, espelho `APORTE_META` criado, **aporte não vira receita nem despesa**, acúmulo de aportes, rejeições, meta vira `CONCLUIDA` ao atingir o alvo. |
 | `testResgateMeta` | Saldo após resgate, espelho `RESGATE_META`, bloqueio por saldo insuficiente, saldo intacto após rejeição. |
 | `testIndicadores` | Mês de referência, receitas/despesas incluem o lançado, `saldo = receitas - despesas`, fórmula da taxa de poupança, top-5 categorias, série de 12 meses, blocos de reserva e fixos/variáveis, soma das categorias ≤ despesas, orçamentos. |
@@ -73,6 +77,31 @@ backup por `Dados → Backup / exportar`.
 - prioridade fora de `alta|media|baixa`;
 - conteúdo bloqueado pelo provedor.
 
+**Recorrências**
+- geração rodada duas vezes seguidas (idempotência via chave de origem);
+- dia 31 em fevereiro bissexto (29), fevereiro comum (28) e abril (30);
+- virada de ano com frequência mensal, trimestral e anual;
+- data final no meio do período (corta a geração e zera a próxima ocorrência);
+- data de início posterior ao dia da recorrência (a ocorrência anterior ao
+  início é ignorada);
+- regra inativa não gera nada;
+- regra com erro não impede as demais de rodar;
+- aporte recorrente cai em `Metas_Movimentos`, não só no extrato;
+- exclusão da regra preserva os lançamentos já gerados.
+
+> A aritmética de datas das recorrências foi verificada fora do Apps Script
+> com 50 datas simuladas de "hoje" (todos os meses, dias 1/15/28/31, ano
+> bissexto e viradas de ano): 308 verificações, 0 falhas. Por isso os números
+> esperados em `testRecorrentes` (4, 2, 2, 2 ocorrências) valem em qualquer dia
+> do ano em que você rodar a bateria.
+
+**Edição e exclusão**
+- editar lançamento inexistente;
+- converter lançamento comum em `APORTE_META`/`RESGATE_META` (recusado);
+- editar/excluir espelho de meta (recusado, com saldo intacto);
+- exclusão definitiva sem confirmação explícita (recusada);
+- cancelar e reativar, conferindo os totais do mês nos dois sentidos.
+
 **Planilha**
 - aba ausente (mensagem pedindo o setup);
 - coluna nova adicionada ao final sem destruir dados;
@@ -90,7 +119,11 @@ backup por `Dados → Backup / exportar`.
 - a meta **Viagem (exemplo)**: alvo R$ 8.000, aporte R$ 500/mês, prazo em 1 ano;
 - **aportes**: dois de R$ 600 na reserva e um de R$ 500 na meta de exemplo;
 - **orçamentos**: Mercado R$ 800 e Lazer R$ 300 — o de Lazer costuma estourar,
-  o que exercita o alerta de orçamento.
+  o que exercita o alerta de orçamento;
+- uma **recorrência**: *Aluguel (exemplo)*, R$ 1.500, todo dia 10, começando no
+  **próximo mês** — assim ela demonstra a geração automática sem mexer no
+  histórico já criado. `Remover dados de exemplo` apaga a regra e tudo o que
+  ela tiver gerado.
 
 Tudo marcado com origem `EXEMPLO` e removível por
 `Dados → Remover dados de exemplo`.
@@ -104,6 +137,12 @@ Tudo marcado com origem `EXEMPLO` e removível por
 5. Tente resgatar mais do que o saldo: deve ser recusado com mensagem clara.
 6. Simule a meta com um aporte maior: o comparativo deve dizer quantos meses você ganha.
 7. `Dados → Validar dados`: nenhum problema crítico.
-8. `Dados → Executar testes`: 12/12.
-9. Sem configurar IA, gere insights: a fonte deve ser `REGRAS` e as sugestões
+8. No Extrato, edite o valor de um lançamento: o saldo do mês acompanha.
+   Cancele-o e veja sair dos totais; reative e veja voltar.
+9. Marque **"Repetir automaticamente"** num lançamento e confira a regra
+   aparecendo na lista de recorrências, com a próxima ocorrência no mês seguinte.
+10. `Recorrentes → Gerar agora` duas vezes seguidas: a segunda deve dizer que
+    não havia nada a gerar.
+11. `Dados → Executar testes`: 14/14.
+12. Sem configurar IA, gere insights: a fonte deve ser `REGRAS` e as sugestões
    devem fazer sentido para os dados de exemplo.

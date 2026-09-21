@@ -155,25 +155,56 @@ function setupFinanceiro(opcoes) {
       atualizarCamposCalculadosMetas();
       logInfo('setupFinanceiro', 'Setup concluido', relatorio);
 
-      return {
-        sucesso: true,
-        mensagem: 'Setup concluido. ' +
-          (relatorio.abasCriadas.length
-            ? 'Abas criadas: ' + relatorio.abasCriadas.join(', ') + '. '
-            : 'Todas as abas ja existiam. ') +
-          relatorio.acoes.join(' '),
-        detalhes: relatorio
-      };
+      var resumo = 'Setup concluido. ' +
+        (relatorio.abasCriadas.length
+          ? 'Abas criadas: ' + relatorio.abasCriadas.join(', ') + '. '
+          : 'Todas as abas ja existiam. ') +
+        relatorio.acoes.join(' ');
+
+      // Rodando pelo editor, o retorno da funcao nao aparece em lugar nenhum.
+      // Sem isto, um setup que falhou parece ter dado certo.
+      console.log('[SETUP OK] ' + resumo);
+
+      return { sucesso: true, mensagem: resumo, detalhes: relatorio };
     }, 60000);
 
   } catch (e) {
     logErro('setupFinanceiro', 'Falha no setup', e.message);
+
+    // Idem: sem este console.log, rodar pelo editor mostra "Execucao
+    // concluida" mesmo quando o setup quebrou no meio.
+    console.error('[SETUP FALHOU] ' + e.message +
+                  '\nEtapas concluidas: ' + (relatorio.acoes.join(' ') || 'nenhuma') +
+                  '\nAbas criadas: ' + (relatorio.abasCriadas.join(', ') || 'nenhuma'));
+
     return {
       sucesso: false,
-      mensagem: 'Nao foi possivel concluir o setup: ' + e.message,
+      mensagem: 'Nao foi possivel concluir o setup: ' + e.message +
+                ' (etapas concluidas ate aqui: ' +
+                (relatorio.acoes.join(' ') || 'nenhuma') + ')',
       detalhes: relatorio
     };
   }
+}
+
+/**
+ * Roda o setup e deixa o resultado visivel no Registro de execucao.
+ * Use esta funcao quando estiver executando pelo EDITOR do Apps Script:
+ * ela lanca excecao em caso de falha, entao o editor mostra o erro em
+ * vermelho em vez de dizer "Execucao concluida".
+ *
+ * @return {string} Mensagem de sucesso.
+ */
+function setupFinanceiroComRelatorio() {
+  var resultado = setupFinanceiro();
+
+  if (!resultado.sucesso) {
+    throw new Error(resultado.mensagem +
+      '\n\nVeja a aba "' + ABAS.LOGS + '" da planilha para o detalhe completo.');
+  }
+
+  Logger.log(resultado.mensagem);
+  return resultado.mensagem;
 }
 
 /**

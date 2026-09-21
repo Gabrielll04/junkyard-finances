@@ -1,0 +1,7 @@
+# Arquivos que NAO devem subir para o projeto Apps Script.
+# O Vincular.gs so faz sentido num projeto avulso; o manifesto de migracao
+# e apenas material de apoio.
+Vincular.gs
+src/Vincular.gs
+appsscript.migracao.json
+src/appsscript.migracao.json

@@ -49,9 +49,13 @@ ele gera sugestões por regras internas.
 4. Rode `setupFinanceiro()` uma vez e autorize.
 5. Recarregue a planilha e use o menu **Financeiro**.
 
-> **Já colou o código num projeto avulso (script.google.com) e o menu não
-> aparece?** Não precisa refazer nada: veja
-> [`docs/INSTALACAO.md` § 3.9](docs/INSTALACAO.md#39-vincular-um-projeto-avulso-a-uma-planilha).
+> **Várias contas Google no navegador, ou já colou o código num projeto avulso
+> e o menu não aparece?** O caminho mais tranquilo é o `clasp` — ele vincula o
+> projeto à sua planilha existente e sobe todos os arquivos de uma vez:
+> [`docs/INSTALACAO.md` § 3.10](docs/INSTALACAO.md#310-instalar-com-clasp-caminho-recomendado-quando-a-ui-atrapalha).
+> Há também o `Vincular.gs` (§ 3.9), que faz o mesmo de dentro do Apps Script,
+> mas depende de uma configuração do Google Cloud que nem sempre está
+> disponível.
 
 Instruções detalhadas em [`docs/INSTALACAO.md`](docs/INSTALACAO.md).
 

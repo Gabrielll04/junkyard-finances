@@ -297,12 +297,32 @@ function _traduzirErroApi(codigo, texto) {
     if (detalhe.indexOf('Apps Script API') !== -1 ||
         detalhe.indexOf('has not been used') !== -1 ||
         detalhe.indexOf('SERVICE_DISABLED') !== -1) {
-      return 'A API do Apps Script esta DESATIVADA nesta conta.\n\n' +
-        'Abra https://script.google.com/home/usersettings e ligue ' +
-        '"API do Google Apps Script".\n' +
-        'Confira pelo avatar que voce esta na mesma conta deste projeto.\n' +
-        'Depois de ligar, espere um minuto e rode de novo.\n\n' +
-        'Resposta da API: ' + detalhe;
+
+      // Existem DOIS interruptores diferentes, e este erro e sempre sobre o
+      // segundo. Ligar so o primeiro nao resolve.
+      var projeto = (detalhe.match(/project (\d+)/) || [])[1] || '';
+
+      return [
+        'A API do Apps Script esta desativada NO PROJETO DO GOOGLE CLOUD que',
+        'fica por tras deste script' + (projeto ? ' (numero ' + projeto + ')' : '') + '.',
+        '',
+        'ATENCAO: nao e o mesmo interruptor de script.google.com/home/usersettings.',
+        'Aquele e a permissao da sua CONTA. Este e do PROJETO CLOUD, e quando um',
+        'script chama a API, o Google cobra a chamada do projeto Cloud dele.',
+        '',
+        'TENTATIVA RAPIDA',
+        projeto
+          ? 'Abra e clique em ATIVAR:\nhttps://console.cloud.google.com/apis/api/script.googleapis.com/overview?project=' + projeto
+          : 'Abra o link que aparece na resposta da API abaixo e clique em ATIVAR.',
+        'Espere um minuto e rode de novo.',
+        '',
+        'SE O LINK NAO ABRIR OU DISSER QUE VOCE NAO TEM PERMISSAO',
+        'O projeto Cloud deste script e um projeto oculto, criado automaticamente',
+        'pelo Apps Script, e nao da para habilitar API nele. Nesse caso use o',
+        'clasp, que nao depende disso: veja a secao 3.10 de docs/INSTALACAO.md.',
+        '',
+        'Resposta da API: ' + detalhe
+      ].join('\n');
     }
     return 'Permissao negada (403). Normalmente falta um escopo no ' +
       'appsscript.json (veja o cabecalho deste arquivo) ou a conta nao tem ' +

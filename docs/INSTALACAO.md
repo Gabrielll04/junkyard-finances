@@ -307,7 +307,7 @@ responde.
 
 | Erro | Causa | Solução |
 |---|---|---|
-| "A API do Apps Script está DESATIVADA" | Passo 1 não foi feito, ou foi feito noutra conta | Ligue em `script.google.com/home/usersettings`, **na conta certa**, espere um minuto |
+| `Apps Script API has not been used in project <número>` | **Não é o interruptor da conta.** É o `script.googleapis.com` desligado no projeto do Google Cloud que fica por trás do script — quando um script chama a API, o Google cobra a chamada do projeto Cloud dele | Tente o link do erro e clique em **ATIVAR**. Se o projeto for oculto (criado automaticamente pelo Apps Script), não dá para habilitar nada nele: **use o `clasp`**, seção 3.10 |
 | `403` sem citar a API | Falta escopo no manifesto | Refaça o passo 2 e rode de novo, aceitando as permissões |
 | `404` | ID da planilha errado, ou a conta não enxerga o arquivo | Confira o ID; cole a URL inteira que o script extrai sozinho |
 | "Não consegui abrir a planilha" | A conta do projeto avulso não tem acesso de edição à planilha | Compartilhe a planilha com essa conta como **Editor** |
@@ -316,3 +316,83 @@ responde.
 > daqui** — não há ambiente Google nesta sessão. O código está com tratamento de
 > erro detalhado justamente por isso: se falhar, a mensagem diz o que corrigir.
 > Me mande o que aparecer no log que eu ajusto.
+
+## 3.10 Instalar com `clasp` (caminho recomendado quando a UI atrapalha)
+
+O `clasp` é a CLI oficial do Apps Script. Ele resolve de uma vez os dois
+problemas mais chatos da instalação manual:
+
+- **Múltiplas contas** — o `clasp login` mostra o seletor de contas
+  explicitamente. Nada de `/u/N/` na URL.
+- **Vincular à planilha** — o `clasp create` aceita `--parentId`, o mesmo
+  parâmetro que o `Vincular.gs` usa. O projeto nasce vinculado.
+
+E, ao contrário do `Vincular.gs`, ele **não esbarra no projeto do Google
+Cloud**: o `clasp` usa o cliente OAuth do próprio Google, então a única coisa
+que precisa estar ligada é a permissão da sua conta em
+<https://script.google.com/home/usersettings> — aquele interruptor sozinho
+basta aqui.
+
+### Pré-requisito
+
+Node.js 18 ou superior. Confira com `node --version`.
+
+```bash
+npm install -g @google/clasp
+```
+
+### Passo 1 — Login
+
+```bash
+clasp login
+```
+
+Abre o navegador com o seletor de contas. **Escolha a conta dona da planilha.**
+
+### Passo 2 — Criar o projeto vinculado
+
+Vá até a pasta do repositório e rode **uma** das duas opções:
+
+**A) Você já tem a planilha** (pegue o ID da URL, entre `/d/` e `/edit`):
+
+```bash
+clasp create --title "Financas Pessoais" --parentId COLE_O_ID_DA_PLANILHA --rootDir ./src
+```
+
+**B) Deixe o clasp criar planilha e script juntos:**
+
+```bash
+clasp create --type sheets --title "Financas Pessoais" --rootDir ./src
+```
+
+### Passo 3 — Enviar o código
+
+```bash
+clasp push
+```
+
+Sobe os `.gs`, o `Sidebar.html` e o `appsscript.json` de uma vez. O
+`.claspignore` do repositório já exclui o `Vincular.gs` e o
+`appsscript.migracao.json`, que não fazem parte do sistema.
+
+### Passo 4 — Usar
+
+```bash
+clasp open --addon     # ou abra a planilha direto no navegador
+```
+
+1. Abra a planilha e **recarregue a página (F5)**.
+2. O menu **Financeiro** aparece.
+3. `Financeiro → Configuração → Executar setup` e autorize.
+
+### Depois
+
+Alterou algo no repositório? `clasp push` de novo e pronto — não precisa
+copiar nada a mão nunca mais.
+
+| Problema | Solução |
+|---|---|
+| `User has not enabled the Apps Script API` | Ligue em <https://script.google.com/home/usersettings> (é o interruptor da conta, e para o clasp ele basta) |
+| `clasp: command not found` | O npm global não está no PATH. Use `npx @google/clasp <comando>` |
+| Entrou com a conta errada | `clasp logout` e depois `clasp login` de novo |
+| `Invalid parentId` | O ID está errado. Pegue só o trecho entre `/d/` e `/edit` da URL da planilha |

@@ -69,6 +69,29 @@ var NOME_PROJETO_VINCULADO = 'Financas Pessoais - Sistema';
 /** Endereco base da API do Apps Script. */
 var API_SCRIPT = 'https://script.googleapis.com/v1/projects';
 
+/**
+ * Permissoes que o SISTEMA FINANCEIRO precisa em tempo de execucao.
+ * Sao gravadas no manifesto do projeto vinculado, substituindo as permissoes
+ * amplas que a migracao exige.
+ *
+ * Nao confie na deteccao automatica de escopos do Apps Script aqui: ela nem
+ * sempre identifica script.container.ui, e sem esse escopo o menu abre mas a
+ * sidebar falha com "As permissoes especificadas nao sao suficientes para
+ * chamar Ui.showSidebar".
+ */
+var ESCOPOS_SISTEMA = [
+  // Ler e escrever nas abas da planilha.
+  'https://www.googleapis.com/auth/spreadsheets',
+  // Menu personalizado, sidebar e caixas de dialogo.
+  'https://www.googleapis.com/auth/script.container.ui',
+  // Gatilho diario (Financeiro > Configuracao > Instalar atualizacao diaria).
+  'https://www.googleapis.com/auth/script.scriptapp',
+  // Chamadas as APIs de IA (opcional, so se voce ativar a IA).
+  'https://www.googleapis.com/auth/script.external_request',
+  // Backup: Financeiro > Dados > Backup/exportar copia a planilha no Drive.
+  'https://www.googleapis.com/auth/drive'
+];
+
 // ===========================================================================
 // FUNCOES PRINCIPAIS
 // ===========================================================================
@@ -199,8 +222,9 @@ function _vincular(idPlanilha) {
 /**
  * Prepara a lista de arquivos para o projeto de destino.
  *  - remove este proprio utilitario (o projeto vinculado nao precisa dele);
- *  - limpa os oauthScopes do manifesto, para o projeto novo pedir apenas as
- *    permissoes que realmente usa, em vez de herdar as amplas da migracao.
+ *  - troca os oauthScopes do manifesto pelos do sistema, de modo que o projeto
+ *    novo nao herde as permissoes amplas da migracao nem fique sem as que
+ *    realmente precisa.
  *
  * @param {Array<Object>} arquivos Lista devolvida por projects.getContent.
  * @return {Array<Object>}
@@ -219,20 +243,23 @@ function _prepararArquivos(arquivos) {
       };
 
       if (arquivo.name === 'appsscript' || arquivo.type === 'JSON') {
+        var manifesto;
         try {
-          var manifesto = JSON.parse(arquivo.source);
-          delete manifesto.oauthScopes;
-          copia.source = JSON.stringify(manifesto, null, 2);
+          manifesto = JSON.parse(arquivo.source);
         } catch (e) {
-          // Manifesto ilegivel: manda um minimo viavel em vez de quebrar tudo.
-          Logger.log('Aviso: manifesto nao pode ser lido, usando o padrao.');
-          copia.source = JSON.stringify({
+          Logger.log('Aviso: manifesto ilegivel, usando o padrao.');
+          manifesto = {
             timeZone: 'America/Sao_Paulo',
             dependencies: {},
             exceptionLogging: 'STACKDRIVER',
             runtimeVersion: 'V8'
-          }, null, 2);
+          };
         }
+        // Lista explicita: nao deixa passar nem as permissoes amplas da
+        // migracao, nem a falta de script.container.ui.
+        manifesto.oauthScopes = ESCOPOS_SISTEMA;
+        manifesto.runtimeVersion = manifesto.runtimeVersion || 'V8';
+        copia.source = JSON.stringify(manifesto, null, 2);
       }
       return copia;
     });

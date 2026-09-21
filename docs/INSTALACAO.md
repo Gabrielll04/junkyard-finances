@@ -219,6 +219,7 @@ Há duas leituras diferentes, e vale saber qual usar:
 | "Limite de requisições (429)" | Free tier atingido. O sistema já caiu no fallback por regras; tente mais tarde. |
 | "Lançamento parece duplicado" | Proteção contra clique duplo. Mude a descrição, ou desligue `bloquear_duplicados`. |
 | Backup falha | Falta a permissão de Drive. Rode `exportarBackup` uma vez pelo editor e autorize. |
+| `As permissões especificadas não são suficientes para chamar Ui.showSidebar` | O `appsscript.json` do projeto não declara `script.container.ui`. Veja **3.11** abaixo. O link que aparece no erro é só o *identificador* da permissão, não uma página para visitar. |
 | Valores do painel zerados | O mês em `F2` do Dashboard está diferente do mês dos lançamentos. |
 | Gráficos não aparecem | `mostrar_graficos` está `NAO`, ou o painel ainda não foi atualizado. Use `Configuração → Mostrar/ocultar gráficos`. |
 | "Este lançamento é o espelho de um movimento de meta" | Aportes e resgates se editam pela meta, não pelo extrato. Registre um movimento compensatório. |
@@ -446,3 +447,77 @@ copiar nada a mão nunca mais.
 | `clasp: command not found` | O npm global não está no PATH. Use `npx @google/clasp <comando>` |
 | Entrou com a conta errada | `clasp logout` e depois `clasp login` de novo |
 | `Invalid parentId` | O ID está errado. Pegue só o trecho entre `/d/` e `/edit` da URL da planilha |
+
+
+## 3.11 Erro de permissão ao abrir a sidebar
+
+Sintoma, ao clicar em `Financeiro → Abrir painel`:
+
+```
+Nao foi possivel abrir o painel: As permissões especificadas não são
+suficientes para chamar Ui.showSidebar. Permissões necessárias:
+https://www.googleapis.com/auth/script.container.ui
+```
+
+O menu aparece, mas a sidebar não abre. Acontece quando o `appsscript.json`
+do projeto não declara a permissão `script.container.ui` — a que autoriza
+menus, sidebars e caixas de diálogo.
+
+> O endereço que aparece no erro é o **identificador** da permissão, não um
+> site. Abri-lo no navegador mostra uma mensagem de API legada que não tem
+> relação com o problema. Ignore.
+
+### Correção
+
+**1.** No editor do Apps Script: **⚙ Configurações do projeto** → marque
+**"Mostrar arquivo de manifesto `appsscript.json`"**.
+
+**2.** Abra o `appsscript.json` e deixe exatamente assim (é o mesmo conteúdo de
+`src/appsscript.json`):
+
+```json
+{
+  "timeZone": "America/Sao_Paulo",
+  "dependencies": {},
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/script.container.ui",
+    "https://www.googleapis.com/auth/script.scriptapp",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/drive"
+  ]
+}
+```
+
+**3.** Salve (`Ctrl+S`).
+
+**4.** Force uma nova autorização: selecione a função **`onOpen`** e clique em
+**Executar**. Como as permissões mudaram, o Google pede consentimento de novo —
+**aceite**. (*Revisar permissões* → sua conta → *Avançado* → *Acessar* →
+*Permitir*.)
+
+**5.** Volte à planilha, **F5**, e `Financeiro → Abrir painel`.
+
+### Se não pedir autorização de novo
+
+O Google às vezes mantém a concessão antiga em cache. Revogue e refaça:
+
+1. Abra <https://myaccount.google.com/permissions>.
+2. Ache o projeto na lista e clique em **Remover acesso**.
+3. Volte à planilha e clique em qualquer item do menu `Financeiro` — a tela de
+   permissões reaparece, agora com o conjunto completo.
+
+### Para que serve cada permissão
+
+| Permissão | Usada em |
+|---|---|
+| `spreadsheets` | Ler e escrever nas abas — é o banco de dados do sistema |
+| `script.container.ui` | Menu `Financeiro`, sidebar e caixas de diálogo |
+| `script.scriptapp` | Gatilho diário (`Configuração → Instalar atualização diária`) |
+| `script.external_request` | Chamadas às APIs de IA — só usada se você ativar a IA |
+| `drive` | `Dados → Backup / exportar`, que copia a planilha no seu Drive |
+
+Se você não pretende usar IA, backup nem gatilho, pode remover as três últimas
+da lista. As duas primeiras são obrigatórias.

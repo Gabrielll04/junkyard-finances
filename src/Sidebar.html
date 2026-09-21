@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    /* ---------------------------------------------------------------
+       CSS embutido, sem dependencias externas (exigencia do projeto).
+       --------------------------------------------------------------- */
+    :root {
+      --azul: #1f3864;
+      --azul-claro: #d9e2f3;
+      --verde: #1e7d45;
+      --vermelho: #b3261e;
+      --amarelo: #8a6d00;
+      --cinza: #5f6368;
+      --borda: #dadce0;
+      --fundo: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: Roboto, Arial, sans-serif;
+      font-size: 13px; margin: 0; padding: 0;
+      color: #202124; background: var(--fundo);
+    }
+    header {
+      background: var(--azul); color: #fff;
+      padding: 10px 12px; position: sticky; top: 0; z-index: 5;
+    }
+    header h1 { font-size: 15px; margin: 0; }
+    header .sub { font-size: 11px; opacity: .85; margin-top: 2px; }
+
+    nav { display: flex; border-bottom: 1px solid var(--borda); background: #f8f9fa; }
+    nav button {
+      flex: 1; padding: 8px 4px; border: 0; background: transparent;
+      cursor: pointer; font-size: 12px; color: var(--cinza);
+      border-bottom: 2px solid transparent;
+    }
+    nav button.ativo { color: var(--azul); border-bottom-color: var(--azul); font-weight: 600; }
+    nav button:hover { background: #eef1f5; }
+
+    main { padding: 12px; }
+    section { display: none; }
+    section.ativa { display: block; }
+
+    h2 { font-size: 13px; margin: 0 0 8px; color: var(--azul); text-transform: uppercase; }
+    h3 { font-size: 12px; margin: 14px 0 6px; color: var(--cinza); }
+
+    .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .kpi {
+      border: 1px solid var(--borda); border-radius: 6px;
+      padding: 8px; background: #fff;
+    }
+    .kpi .rotulo { font-size: 10px; color: var(--cinza); text-transform: uppercase; }
+    .kpi .valor { font-size: 15px; font-weight: 600; margin-top: 2px; }
+    .kpi.negativo .valor { color: var(--vermelho); }
+    .kpi.positivo .valor { color: var(--verde); }
+    .kpi.alerta { border-color: var(--vermelho); background: #fdf1f0; }
+
+    .meta { border: 1px solid var(--borda); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+    .meta .topo { display: flex; justify-content: space-between; align-items: baseline; }
+    .meta .nome { font-weight: 600; }
+    .meta .pct { font-size: 11px; color: var(--cinza); }
+    .meta .detalhe { font-size: 11px; color: var(--cinza); margin-top: 4px; }
+    .barra { height: 8px; background: #eceff1; border-radius: 4px; margin-top: 6px; overflow: hidden; }
+    .barra > div { height: 100%; background: var(--azul); border-radius: 4px; }
+    .barra.reserva > div { background: var(--vermelho); }
+
+    label { display: block; font-size: 11px; color: var(--cinza); margin: 8px 0 3px; }
+    input, select, textarea {
+      width: 100%; padding: 6px 8px; font-size: 13px;
+      border: 1px solid var(--borda); border-radius: 4px; font-family: inherit;
+    }
+    input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul-claro); }
+
+    button.acao {
+      width: 100%; margin-top: 12px; padding: 9px;
+      background: var(--azul); color: #fff; border: 0; border-radius: 4px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    button.acao:hover { background: #2a4c86; }
+    button.acao:disabled { background: #9aa0a6; cursor: not-allowed; }
+    button.secundario { background: #fff; color: var(--azul); border: 1px solid var(--azul); }
+    button.secundario:hover { background: var(--azul-claro); }
+
+    .linha { display: flex; gap: 8px; }
+    .linha > * { flex: 1; }
+
+    .mensagem {
+      margin-top: 10px; padding: 8px; border-radius: 4px;
+      font-size: 12px; display: none; white-space: pre-wrap;
+    }
+    .mensagem.ok { display: block; background: #e6f4ea; color: var(--verde); }
+    .mensagem.erro { display: block; background: #fce8e6; color: var(--vermelho); }
+    .mensagem.info { display: block; background: #e8f0fe; color: var(--azul); }
+
+    .carregando {
+      display: none; text-align: center; padding: 10px;
+      font-size: 12px; color: var(--cinza);
+    }
+    .carregando.ativo { display: block; }
+    .girando {
+      display: inline-block; width: 12px; height: 12px; margin-right: 6px;
+      border: 2px solid var(--azul-claro); border-top-color: var(--azul);
+      border-radius: 50%; animation: girar .8s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes girar { to { transform: rotate(360deg); } }
+
+    ul.lista { margin: 4px 0; padding-left: 16px; }
+    ul.lista li { margin-bottom: 4px; font-size: 12px; }
+
+    .sugestao { border-left: 3px solid var(--azul); padding: 6px 8px; margin-bottom: 8px; background: #f8f9fa; }
+    .sugestao.alta { border-left-color: var(--vermelho); }
+    .sugestao.media { border-left-color: var(--amarelo); }
+    .sugestao.baixa { border-left-color: var(--verde); }
+    .sugestao .titulo { font-weight: 600; font-size: 12px; }
+    .sugestao .descricao { font-size: 11px; color: var(--cinza); margin-top: 3px; }
+
+    .aviso { font-size: 10px; color: var(--cinza); margin-top: 12px; font-style: italic; }
+    .vazio { font-size: 12px; color: var(--cinza); font-style: italic; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Financas Pessoais</h1>
+  <div class="sub" id="cabecalhoSub">Carregando...</div>
+</header>
+
+<nav>
+  <button type="button" class="ativo" data-aba="painel">Painel</button>
+  <button type="button" data-aba="lancar">Lancar</button>
+  <button type="button" data-aba="metas">Metas</button>
+  <button type="button" data-aba="simular">Simular</button>
+  <button type="button" data-aba="sugestoes">Sugestoes</button>
+</nav>
+
+<div class="carregando" id="carregando"><span class="girando"></span>Processando...</div>
+
+<main>
+
+  <!-- ================= PAINEL ================= -->
+  <section id="aba-painel" class="ativa">
+    <h2>Resumo do mes</h2>
+    <div class="kpis" id="kpis"></div>
+
+    <h3>Reserva de emergencia</h3>
+    <div id="blocoReserva"></div>
+
+    <h3>Maiores gastos</h3>
+    <ul class="lista" id="listaCategorias"></ul>
+
+    <h3>Alertas</h3>
+    <ul class="lista" id="listaAlertas"></ul>
+
+    <button type="button" class="acao" id="btnAtualizar">Atualizar dados</button>
+    <button type="button" class="acao secundario" id="btnAtualizarPainelPlanilha">
+      Atualizar aba Dashboard
+    </button>
+  </section>
+
+  <!-- ================= LANCAR ================= -->
+  <section id="aba-lancar">
+    <h2>Lancamento rapido</h2>
+    <form id="formLancamento">
+      <label for="lancTipo">Tipo</label>
+      <select id="lancTipo">
+        <option value="DESPESA">Despesa</option>
+        <option value="RECEITA">Receita</option>
+      </select>
+
+      <div class="linha">
+        <div>
+          <label for="lancValor">Valor</label>
+          <input type="text" id="lancValor" placeholder="0,00" inputmode="decimal" required>
+        </div>
+        <div>
+          <label for="lancData">Data</label>
+          <input type="date" id="lancData" required>
+        </div>
+      </div>
+
+      <label for="lancCategoria">Categoria</label>
+      <input list="listaCategoriasDatalist" id="lancCategoria" placeholder="Ex.: Mercado" required>
+      <datalist id="listaCategoriasDatalist"></datalist>
+
+      <label for="lancDescricao">Descricao (opcional)</label>
+      <input type="text" id="lancDescricao" maxlength="200">
+
+      <button type="submit" class="acao">Registrar lancamento</button>
+      <div class="mensagem" id="msgLancamento"></div>
+    </form>
+  </section>
+
+  <!-- ================= METAS ================= -->
+  <section id="aba-metas">
+    <h2>Suas metas</h2>
+    <div id="listaMetas"></div>
+
+    <h3>Aportar / resgatar</h3>
+    <form id="formMovimento">
+      <label for="movMeta">Meta</label>
+      <select id="movMeta" required></select>
+
+      <div class="linha">
+        <div>
+          <label for="movOperacao">Operacao</label>
+          <select id="movOperacao">
+            <option value="APORTE">Aporte</option>
+            <option value="RESGATE">Resgate</option>
+          </select>
+        </div>
+        <div>
+          <label for="movValor">Valor</label>
+          <input type="text" id="movValor" placeholder="0,00" inputmode="decimal" required>
+        </div>
+      </div>
+
+      <label for="movData">Data</label>
+      <input type="date" id="movData" required>
+
+      <label for="movDescricao">Descricao (opcional)</label>
+      <input type="text" id="movDescricao" maxlength="200">
+
+      <button type="submit" class="acao">Confirmar movimento</button>
+      <div class="mensagem" id="msgMovimento"></div>
+    </form>
+
+    <h3>Nova meta</h3>
+    <form id="formMeta">
+      <label for="metaNome">Nome</label>
+      <input type="text" id="metaNome" required maxlength="80">
+
+      <div class="linha">
+        <div>
+          <label for="metaTipo">Tipo</label>
+          <select id="metaTipo">
+            <option value="META">Meta comum</option>
+            <option value="RESERVA">Reserva de emergencia</option>
+          </select>
+        </div>
+        <div>
+          <label for="metaAlvo">Valor alvo</label>
+          <input type="text" id="metaAlvo" placeholder="0,00" inputmode="decimal">
+        </div>
+      </div>
+
+      <div class="linha">
+        <div>
+          <label for="metaAporte">Aporte mensal</label>
+          <input type="text" id="metaAporte" placeholder="0,00" inputmode="decimal">
+        </div>
+        <div>
+          <label for="metaPrazo">Data limite</label>
+          <input type="date" id="metaPrazo">
+        </div>
+      </div>
+
+      <label for="metaSaldoInicial">Saldo inicial ja guardado (opcional)</label>
+      <input type="text" id="metaSaldoInicial" placeholder="0,00" inputmode="decimal">
+
+      <button type="submit" class="acao">Criar meta</button>
+      <div class="mensagem" id="msgMeta"></div>
+    </form>
+  </section>
+
+  <!-- ================= SIMULAR ================= -->
+  <section id="aba-simular">
+    <h2>Simulacao de meta</h2>
+    <form id="formSimulacao">
+      <label for="simMeta">Meta</label>
+      <select id="simMeta" required></select>
+
+      <div class="linha">
+        <div>
+          <label for="simAporte">Aporte mensal a simular</label>
+          <input type="text" id="simAporte" placeholder="0,00" inputmode="decimal">
+        </div>
+        <div>
+          <label for="simMeses">Horizonte (meses)</label>
+          <input type="number" id="simMeses" value="12" min="1" max="600">
+        </div>
+      </div>
+
+      <button type="submit" class="acao">Simular</button>
+      <div class="mensagem" id="msgSimulacao"></div>
+    </form>
+    <div id="resultadoSimulacao"></div>
+  </section>
+
+  <!-- ================= SUGESTOES ================= -->
+  <section id="aba-sugestoes">
+    <h2>Sugestoes</h2>
+    <div id="statusIa" class="vazio"></div>
+    <div id="blocoInsights"></div>
+    <button type="button" class="acao" id="btnGerarInsights">Gerar sugestoes agora</button>
+    <div class="mensagem" id="msgInsights"></div>
+    <p class="aviso" id="avisoInsights"></p>
+  </section>
+
+</main>
+
+<script>
+/* -------------------------------------------------------------------
+   JavaScript embutido. Sem bibliotecas externas.
+   Toda chamada ao servidor passa por `chamarServidor`, que trata
+   loading e erros de forma uniforme.
+   ------------------------------------------------------------------- */
+
+var estadoAtual = null;
+
+/** Mostra/esconde o indicador global de carregamento. */
+function definirCarregando(ativo) {
+  document.getElementById('carregando').classList.toggle('ativo', !!ativo);
+}
+
+/**
+ * Exibe uma mensagem em um elemento.
+ * @param {string} id
+ * @param {string} texto
+ * @param {string} tipo 'ok' | 'erro' | 'info'
+ */
+function mostrarMensagem(id, texto, tipo) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.className = 'mensagem ' + (tipo || 'info');
+  el.textContent = texto;
+  if (tipo === 'ok') {
+    window.setTimeout(function () { el.className = 'mensagem'; }, 6000);
+  }
+}
+
+/** Limpa uma mensagem. */
+function limparMensagem(id) {
+  var el = document.getElementById(id);
+  if (el) { el.className = 'mensagem'; el.textContent = ''; }
+}
+
+/**
+ * Chama uma funcao do servidor devolvendo o payload padronizado.
+ * @param {string} funcao Nome da funcao em UI.gs.
+ * @param {*} argumento
+ * @param {function(*)} aoSucesso
+ * @param {function(string)=} aoErro
+ */
+function chamarServidor(funcao, argumento, aoSucesso, aoErro) {
+  definirCarregando(true);
+  google.script.run
+    .withSuccessHandler(function (resposta) {
+      definirCarregando(false);
+      if (!resposta) {
+        if (aoErro) aoErro('Resposta vazia do servidor.');
+        return;
+      }
+      if (resposta.sucesso) aoSucesso(resposta.dados);
+      else if (aoErro) aoErro(resposta.mensagem || 'Erro desconhecido.');
+    })
+    .withFailureHandler(function (erro) {
+      definirCarregando(false);
+      if (aoErro) aoErro((erro && erro.message) ? erro.message : String(erro));
+    })[funcao](argumento);
+}
+
+/** Converte "1.234,56" ou "1234.56" em numero. Retorna NaN se invalido. */
+function paraNumeroCliente(texto) {
+  if (texto === null || texto === undefined) return NaN;
+  var limpo = String(texto).trim().replace(/[R$\s]/g, '');
+  if (!limpo) return NaN;
+  if (limpo.indexOf(',') !== -1 && limpo.indexOf('.') !== -1) {
+    limpo = (limpo.lastIndexOf(',') > limpo.lastIndexOf('.'))
+      ? limpo.replace(/\./g, '').replace(',', '.')
+      : limpo.replace(/,/g, '');
+  } else if (limpo.indexOf(',') !== -1) {
+    limpo = limpo.replace(',', '.');
+  }
+  var numero = Number(limpo);
+  return isNaN(numero) ? NaN : numero;
+}
+
+/** Data de hoje em yyyy-mm-dd, para inputs type=date. */
+function hojeIso() {
+  var d = new Date();
+  var mes = String(d.getMonth() + 1).padStart(2, '0');
+  var dia = String(d.getDate()).padStart(2, '0');
+  return d.getFullYear() + '-' + mes + '-' + dia;
+}
+
+/** Escapa texto antes de inserir no HTML. */
+function escapar(texto) {
+  var div = document.createElement('div');
+  div.textContent = (texto === null || texto === undefined) ? '' : String(texto);
+  return div.innerHTML;
+}
+
+/* ---------------------------- NAVEGACAO ---------------------------- */
+
+Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (botao) {
+  botao.addEventListener('click', function () {
+    Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (b) {
+      b.classList.remove('ativo');
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('section'), function (s) {
+      s.classList.remove('ativa');
+    });
+    botao.classList.add('ativo');
+    document.getElementById('aba-' + botao.dataset.aba).classList.add('ativa');
+  });
+});
+
+/* ---------------------------- RENDERIZACAO ---------------------------- */
+
+/** Redesenha toda a interface a partir do estado. */
+function renderizar(estado) {
+  estadoAtual = estado;
+  document.getElementById('cabecalhoSub').textContent =
+    estado.mesFormatado + ' - atualizado em ' + estado.atualizadoEm;
+
+  var k = estado.kpis;
+  document.getElementById('kpis').innerHTML = [
+    montarKpi('Receitas', k.receitas, 'positivo'),
+    montarKpi('Despesas', k.despesas, ''),
+    montarKpi('Saldo do mes', k.saldo, k.saldoNegativo ? 'negativo' : 'positivo'),
+    montarKpi('Taxa de poupanca', k.taxaPoupanca + '%', k.taxaPoupanca < 10 ? 'alerta' : 'positivo'),
+    montarKpi('Aportado no mes', k.aportes, ''),
+    montarKpi('Resgatado no mes', k.resgates, ''),
+    montarKpi('Total em metas', k.totalMetas, ''),
+    montarKpi('Progresso medio', k.progressoMedio + '%', '')
+  ].join('');
+
+  document.getElementById('blocoReserva').innerHTML =
+    '<div class="meta">' +
+      '<div class="topo"><span class="nome">' + escapar(k.reservaSaldo) + '</span>' +
+      '<span class="pct">cobre ' + k.coberturaReserva + ' de ' +
+      k.mesesRecomendados + ' meses</span></div>' +
+      '<div class="barra reserva"><div style="width:' +
+      Math.min((k.coberturaReserva / Math.max(k.mesesRecomendados, 1)) * 100, 100) +
+      '%"></div></div>' +
+      '<div class="detalhe">Recomendado: ' + escapar(k.reservaRecomendada) +
+      (k.reservaEmRisco ? ' - abaixo do alvo, vale priorizar.' : ' - alvo atingido.') +
+      '</div>' +
+    '</div>';
+
+  document.getElementById('listaCategorias').innerHTML =
+    (estado.topCategorias.length
+      ? estado.topCategorias.map(function (c) {
+          return '<li>' + escapar(c.categoria) + ': <strong>' + escapar(c.total) + '</strong></li>';
+        }).join('')
+      : '<li class="vazio">Sem despesas registradas neste mes.</li>');
+
+  document.getElementById('listaAlertas').innerHTML =
+    (estado.alertas.length
+      ? estado.alertas.map(function (a) { return '<li>' + escapar(a) + '</li>'; }).join('')
+      : '<li class="vazio">Nenhum alerta.</li>');
+
+  renderizarMetas(estado.metas);
+  preencherSelecoesDeMeta(estado.metas);
+  preencherCategorias();
+  renderizarInsights(estado.insights, estado.statusIa);
+}
+
+/** Monta o HTML de um cartao de KPI. */
+function montarKpi(rotulo, valor, classe) {
+  return '<div class="kpi ' + classe + '">' +
+    '<div class="rotulo">' + escapar(rotulo) + '</div>' +
+    '<div class="valor">' + escapar(valor) + '</div></div>';
+}
+
+/** Lista visual das metas com barra de progresso. */
+function renderizarMetas(metas) {
+  var container = document.getElementById('listaMetas');
+  if (!metas || !metas.length) {
+    container.innerHTML = '<p class="vazio">Nenhuma meta ativa. Crie uma abaixo.</p>';
+    return;
+  }
+  container.innerHTML = metas.map(function (m) {
+    var detalhe;
+    if (m.faltante <= 0) {
+      detalhe = 'Meta atingida.';
+    } else if (m.mesesRestantes === null) {
+      detalhe = 'Faltam ' + formatarBr(m.faltante) + '. Sem previsao com o aporte atual.';
+    } else {
+      detalhe = 'Faltam ' + formatarBr(m.faltante) + ' - cerca de ' +
+                m.mesesRestantes + ' mes(es).';
+    }
+    if (m.prazo) detalhe += ' Prazo: ' + escapar(m.prazo) + '.';
+
+    return '<div class="meta">' +
+      '<div class="topo"><span class="nome">' + escapar(m.nome) + '</span>' +
+      '<span class="pct">' + m.progresso + '%</span></div>' +
+      '<div class="barra' + (m.tipo === 'RESERVA' ? ' reserva' : '') + '">' +
+      '<div style="width:' + m.progresso + '%"></div></div>' +
+      '<div class="detalhe">' + formatarBr(m.saldo) + ' de ' + formatarBr(m.alvo) +
+      '<br>' + detalhe + '</div></div>';
+  }).join('');
+}
+
+/** Formata numero como moeda brasileira simples (o servidor ja envia textos prontos noutros pontos). */
+function formatarBr(valor) {
+  var numero = Number(valor);
+  if (isNaN(numero)) return String(valor);
+  return 'R$ ' + numero.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!,))/g, '.');
+}
+
+/** Preenche os selects de meta (movimento e simulacao). */
+function preencherSelecoesDeMeta(metas) {
+  ['movMeta', 'simMeta'].forEach(function (id) {
+    var select = document.getElementById(id);
+    var anterior = select.value;
+    select.innerHTML = (metas || []).map(function (m) {
+      return '<option value="' + escapar(m.id) + '">' + escapar(m.nome) +
+             ' (' + m.progresso + '%)</option>';
+    }).join('');
+    if (anterior) select.value = anterior;
+  });
+}
+
+/** Preenche o datalist de categorias conforme o tipo selecionado. */
+function preencherCategorias() {
+  if (!estadoAtual) return;
+  var tipo = document.getElementById('lancTipo').value;
+  var lista = (tipo === 'RECEITA')
+    ? estadoAtual.categoriasReceita
+    : estadoAtual.categoriasDespesa;
+  document.getElementById('listaCategoriasDatalist').innerHTML =
+    (lista || []).map(function (c) {
+      return '<option value="' + escapar(c) + '"></option>';
+    }).join('');
+}
+
+/** Desenha o bloco de sugestoes. */
+function renderizarInsights(insights, statusIa) {
+  var elStatus = document.getElementById('statusIa');
+  if (statusIa) {
+    elStatus.textContent = statusIa.mensagem;
+  }
+  var container = document.getElementById('blocoInsights');
+  if (!insights) {
+    container.innerHTML = '<p class="vazio">Nenhuma sugestao gerada ainda.</p>';
+    return;
+  }
+  var html = '<p><strong>' + escapar(insights.fonte || 'REGRAS') + '</strong><br>' +
+             escapar(insights.resumo || '') + '</p>';
+  html += (insights.sugestoes || []).map(function (s) {
+    return '<div class="sugestao ' + escapar(s.prioridade || 'media') + '">' +
+      '<div class="titulo">' + escapar(s.titulo) + '</div>' +
+      (s.descricao ? '<div class="descricao">' + escapar(s.descricao) + '</div>' : '') +
+      '</div>';
+  }).join('');
+  if (insights.erro) {
+    html += '<p class="vazio">Observacao: ' + escapar(insights.erro) + '</p>';
+  }
+  container.innerHTML = html;
+  document.getElementById('avisoInsights').textContent = insights.observacoes || '';
+}
+
+/* ---------------------------- CARGA INICIAL ---------------------------- */
+
+function carregarEstado() {
+  chamarServidor('uiObterEstado', null, renderizar, function (erro) {
+    document.getElementById('cabecalhoSub').textContent = 'Erro ao carregar';
+    mostrarMensagem('msgLancamento', 'Nao foi possivel carregar os dados: ' + erro, 'erro');
+  });
+}
+
+document.getElementById('lancData').value = hojeIso();
+document.getElementById('movData').value = hojeIso();
+document.getElementById('lancTipo').addEventListener('change', preencherCategorias);
+carregarEstado();
+
+/* ---------------------------- ACOES ---------------------------- */
+
+document.getElementById('btnAtualizar').addEventListener('click', carregarEstado);
+
+document.getElementById('btnAtualizarPainelPlanilha').addEventListener('click', function () {
+  chamarServidor('uiAtualizarDashboard', null, function () {
+    carregarEstado();
+  }, function (erro) {
+    mostrarMensagem('msgLancamento', erro, 'erro');
+  });
+});
+
+document.getElementById('formLancamento').addEventListener('submit', function (evento) {
+  evento.preventDefault();
+  limparMensagem('msgLancamento');
+
+  var valor = paraNumeroCliente(document.getElementById('lancValor').value);
+  if (isNaN(valor) || valor <= 0) {
+    mostrarMensagem('msgLancamento', 'Informe um valor maior que zero.', 'erro');
+    return;
+  }
+  var categoria = document.getElementById('lancCategoria').value.trim();
+  if (!categoria) {
+    mostrarMensagem('msgLancamento', 'Informe a categoria.', 'erro');
+    return;
+  }
+
+  chamarServidor('uiRegistrarLancamento', {
+    tipo: document.getElementById('lancTipo').value,
+    valor: valor,
+    data: document.getElementById('lancData').value,
+    categoria: categoria,
+    descricao: document.getElementById('lancDescricao').value.trim()
+  }, function (dados) {
+    mostrarMensagem('msgLancamento', 'Registrado: ' + dados.texto, 'ok');
+    document.getElementById('lancValor').value = '';
+    document.getElementById('lancDescricao').value = '';
+    carregarEstado();
+  }, function (erro) {
+    mostrarMensagem('msgLancamento', erro, 'erro');
+  });
+});
+
+document.getElementById('formMovimento').addEventListener('submit', function (evento) {
+  evento.preventDefault();
+  limparMensagem('msgMovimento');
+
+  var valor = paraNumeroCliente(document.getElementById('movValor').value);
+  if (isNaN(valor) || valor <= 0) {
+    mostrarMensagem('msgMovimento', 'Informe um valor maior que zero.', 'erro');
+    return;
+  }
+  var metaId = document.getElementById('movMeta').value;
+  if (!metaId) {
+    mostrarMensagem('msgMovimento', 'Selecione uma meta.', 'erro');
+    return;
+  }
+
+  chamarServidor('uiMovimentarMeta', {
+    metaId: metaId,
+    operacao: document.getElementById('movOperacao').value,
+    valor: valor,
+    data: document.getElementById('movData').value,
+    descricao: document.getElementById('movDescricao').value.trim()
+  }, function (dados) {
+    mostrarMensagem('msgMovimento',
+      'Novo saldo de "' + dados.nome + '": ' + dados.saldo +
+      ' (' + dados.progresso + '%).', 'ok');
+    document.getElementById('movValor').value = '';
+    document.getElementById('movDescricao').value = '';
+    carregarEstado();
+  }, function (erro) {
+    mostrarMensagem('msgMovimento', erro, 'erro');
+  });
+});
+
+document.getElementById('formMeta').addEventListener('submit', function (evento) {
+  evento.preventDefault();
+  limparMensagem('msgMeta');
+
+  var nome = document.getElementById('metaNome').value.trim();
+  if (!nome) {
+    mostrarMensagem('msgMeta', 'Informe o nome da meta.', 'erro');
+    return;
+  }
+  var tipo = document.getElementById('metaTipo').value;
+  var alvoTexto = document.getElementById('metaAlvo').value.trim();
+  var alvo = paraNumeroCliente(alvoTexto);
+  if (tipo === 'META' && (isNaN(alvo) || alvo <= 0)) {
+    mostrarMensagem('msgMeta', 'Informe um valor alvo maior que zero.', 'erro');
+    return;
+  }
+
+  chamarServidor('uiCriarMeta', {
+    nome: nome,
+    tipo: tipo,
+    valor_alvo: alvoTexto ? alvo : '',
+    aporte_mensal_planejado: document.getElementById('metaAporte').value.trim(),
+    data_prazo: document.getElementById('metaPrazo').value,
+    saldo_inicial: document.getElementById('metaSaldoInicial').value.trim()
+  }, function (dados) {
+    mostrarMensagem('msgMeta', 'Meta "' + dados.nome + '" criada.', 'ok');
+    document.getElementById('formMeta').reset();
+    carregarEstado();
+  }, function (erro) {
+    mostrarMensagem('msgMeta', erro, 'erro');
+  });
+});
+
+document.getElementById('formSimulacao').addEventListener('submit', function (evento) {
+  evento.preventDefault();
+  limparMensagem('msgSimulacao');
+  document.getElementById('resultadoSimulacao').innerHTML = '';
+
+  var metaId = document.getElementById('simMeta').value;
+  if (!metaId) {
+    mostrarMensagem('msgSimulacao', 'Selecione uma meta.', 'erro');
+    return;
+  }
+  var aporte = paraNumeroCliente(document.getElementById('simAporte').value);
+  var meses = parseInt(document.getElementById('simMeses').value, 10);
+  if (isNaN(meses) || meses <= 0) {
+    mostrarMensagem('msgSimulacao', 'Informe um horizonte valido em meses.', 'erro');
+    return;
+  }
+
+  chamarServidor('uiSimularMeta', {
+    metaId: metaId,
+    aporteSimulado: isNaN(aporte) ? '' : aporte,
+    mesesProjecao: meses
+  }, function (d) {
+    var html = '<div class="meta">' +
+      '<div class="topo"><span class="nome">' + escapar(d.nome) + '</span>' +
+      '<span class="pct">' + d.progresso + '%</span></div>' +
+      '<div class="barra"><div style="width:' + d.progresso + '%"></div></div>' +
+      '<div class="detalhe">' + escapar(d.saldo) + ' de ' + escapar(d.alvo) +
+      '<br>Faltam ' + escapar(d.faltante) +
+      '<br>' + escapar(d.mensagemPrazo) +
+      (d.dataPrevista ? '<br>Previsao: ' + escapar(d.dataPrevista) : '') +
+      '<br>Em ' + d.projecaoMeses + ' meses: <strong>' + escapar(d.projecaoValor) +
+      '</strong></div></div>';
+
+    if (d.cenario) {
+      html += '<div class="sugestao media"><div class="titulo">Cenario simulado (' +
+        escapar(d.cenario.aporte) + '/mes)</div><div class="descricao">' +
+        escapar(d.cenario.mensagem) +
+        (d.cenario.comparativo ? '<br>' + escapar(d.cenario.comparativo) : '') +
+        '<br>Valor em ' + d.projecaoMeses + ' meses: ' + escapar(d.cenario.valorFuturo) +
+        '</div></div>';
+    }
+    if (d.prazo) {
+      html += '<div class="sugestao alta"><div class="titulo">Prazo declarado: ' +
+        escapar(d.prazo.data) + '</div><div class="descricao">' +
+        escapar(d.prazo.mensagem) + '</div></div>';
+    }
+    if (d.alertas && d.alertas.length) {
+      html += '<ul class="lista">' + d.alertas.map(function (a) {
+        return '<li>' + escapar(a) + '</li>';
+      }).join('') + '</ul>';
+    }
+    document.getElementById('resultadoSimulacao').innerHTML = html;
+  }, function (erro) {
+    mostrarMensagem('msgSimulacao', erro, 'erro');
+  });
+});
+
+document.getElementById('btnGerarInsights').addEventListener('click', function () {
+  limparMensagem('msgInsights');
+  chamarServidor('uiGerarInsights', null, function (insights) {
+    renderizarInsights(insights, estadoAtual ? estadoAtual.statusIa : null);
+    mostrarMensagem('msgInsights', 'Sugestoes atualizadas (' + insights.fonte + ').', 'ok');
+  }, function (erro) {
+    mostrarMensagem('msgInsights', erro, 'erro');
+  });
+});
+</script>
+
+</body>
+</html>

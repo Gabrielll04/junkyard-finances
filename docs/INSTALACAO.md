@@ -317,6 +317,56 @@ responde.
 > erro detalhado justamente por isso: se falhar, a mensagem diz o que corrigir.
 > Me mande o que aparecer no log que eu ajusto.
 
+### 3.9.1 Quando o projeto Cloud é oculto
+
+Se o erro `Apps Script API has not been used in project <número>` aparecer e,
+ao abrir o link, o Cloud Console disser que **você precisa solicitar permissão**
+ou o projeto não estiver na sua lista, é porque aquele projeto **não é seu**: o
+Apps Script cria um projeto Cloud oculto por script e o mantém sob controle do
+Google. Não há como habilitar API nele. Não é erro de configuração sua.
+
+Duas saídas:
+
+- **Use o `clasp`** (seção 3.10). Ele não passa por projeto Cloud nenhum. É o
+  caminho mais curto se você tiver Node instalado.
+- **Troque o projeto Cloud do script** por um seu, abaixo. Serve para quem não
+  quer instalar Node.
+
+#### Trocar o projeto Cloud do script
+
+**1. Escolha um projeto Cloud seu** em <https://console.cloud.google.com>.
+Pode ser um existente ou um novo (*Criar projeto*).
+
+**2. Anote o NÚMERO do projeto** — não o ID. No painel inicial do projeto, em
+*Informações do projeto*, há **"Número do projeto"**: uma sequência só de
+dígitos. É esse valor que o Apps Script pede.
+
+**3. Ative a Apps Script API nesse projeto:**
+
+```
+https://console.cloud.google.com/apis/library/script.googleapis.com?project=SEU_ID_DO_PROJETO
+```
+
+Clique em **ATIVAR**.
+
+**4. Configure a tela de consentimento OAuth** — o Apps Script recusa a troca
+sem isso. Em *APIs e serviços → Tela de permissão OAuth*:
+
+- tipo **Externo** (ou *Interno*, se for conta Workspace);
+- preencha nome do app, e-mail de suporte e e-mail do desenvolvedor;
+- **Salvar**. Não precisa publicar nem pedir verificação — é para uso pessoal.
+
+**5. Aponte o script para esse projeto.** No editor do Apps Script:
+**⚙ Configurações do projeto → Projeto do Google Cloud Platform → Mudar
+projeto** → cole o **número** do passo 2 → **Definir projeto**.
+
+**6. Rode `vincularProjetoAPlanilha()` de novo.** Agora a chamada é cobrada do
+*seu* projeto, onde a API está ativada.
+
+> Depois da troca o script pede autorização de novo, e pode aparecer o aviso de
+> "app não verificado". Para uso pessoal é esperado: **Avançado → Acessar**.
+
+
 ## 3.10 Instalar com `clasp` (caminho recomendado quando a UI atrapalha)
 
 O `clasp` é a CLI oficial do Apps Script. Ele resolve de uma vez os dois

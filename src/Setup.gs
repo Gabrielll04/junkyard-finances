@@ -61,6 +61,110 @@ var CATEGORIAS_PADRAO = [
 ];
 
 // ===========================================================================
+// VERIFICACAO DE INSTALACAO
+// ===========================================================================
+
+/**
+ * Sentinelas de cada arquivo do projeto.
+ *
+ * Cada entrada referencia diretamente funcoes daquele arquivo. Se o arquivo
+ * nao foi copiado, avaliar a funcao lanca ReferenceError - e a mensagem do
+ * proprio erro diz qual identificador faltou. Nada de eval nem de busca
+ * dinamica no escopo global.
+ *
+ * No Apps Script todos os arquivos compartilham o escopo global, entao um
+ * arquivo faltando so aparece como "X is not defined" no meio de uma operacao
+ * qualquer, as vezes muito depois da instalacao. Esta checagem antecipa isso.
+ */
+var SENTINELAS = [
+  { arquivo: 'Repositorio.gs', testar: function () {
+      return [obterAbaSegura, lerTabela, adicionarLinha, formatarMoeda,
+              dataPlausivel, comLock]; } },
+  { arquivo: 'Financeiro.gs', testar: function () {
+      return [registrarLancamento, editarLancamento, excluirLancamento,
+              listarCategorias]; } },
+  { arquivo: 'Recorrentes.gs', testar: function () {
+      return [criarRecorrente, gerarLancamentosRecorrentes,
+              calcularComprometimentoMensal]; } },
+  { arquivo: 'Metas.gs', testar: function () {
+      return [criarMeta, listarMetas, aportarEmMeta, obterMetaReserva,
+              atualizarCamposCalculadosMetas]; } },
+  { arquivo: 'Previsoes.gs', testar: function () {
+      return [calcularValorFuturo, calcularMesesParaMeta,
+              calcularAporteNecessario, simularMeta]; } },
+  { arquivo: 'Indicadores.gs', testar: function () {
+      return [gerarIndicadores, calcularDespesaMediaMensal,
+              gerarInsightsAutomaticosSemIA, avaliarOrcamentos]; } },
+  { arquivo: 'Dashboard.gs', testar: function () {
+      return [atualizarDashboard, montarLayoutDashboard]; } },
+  { arquivo: 'IA.gs', testar: function () {
+      return [gerarInsightsIA, parseRespostaIA, obterStatusIA]; } },
+  { arquivo: 'UI.gs', testar: function () {
+      return [onOpen, criarMenu, abrirSidebar, uiObterEstado]; } },
+  { arquivo: 'ImportacaoFutura.gs', testar: function () {
+      return [prepararImportacaoDocumentos, criarLancamentoAPartirImportacao]; } },
+  { arquivo: 'Testes.gs', testar: function () {
+      return [executarTodosOsTestes]; } }
+];
+
+/**
+ * Confere se todos os arquivos do projeto foram copiados para o Apps Script.
+ *
+ * @return {{ok: boolean, problemas: Array<string>, sidebarOk: boolean,
+ *           mensagem: string}}
+ */
+function verificarInstalacao() {
+  var problemas = [];
+
+  SENTINELAS.forEach(function (sentinela) {
+    try {
+      var funcoes = sentinela.testar();
+      var quebradas = funcoes.filter(function (f) { return typeof f !== 'function'; });
+      if (quebradas.length) {
+        problemas.push(sentinela.arquivo + ': existe, mas algo foi sobrescrito.');
+      }
+    } catch (e) {
+      // "criarMeta is not defined" -> o arquivo nao esta no projeto, ou o
+      // conteudo foi colado pela metade.
+      problemas.push(sentinela.arquivo + ' -> ' + e.message);
+    }
+  });
+
+  // O Sidebar.html nao tem funcoes; testa-se tentando carregar o arquivo.
+  var sidebarOk = true;
+  try {
+    HtmlService.createHtmlOutputFromFile('Sidebar');
+  } catch (e) {
+    sidebarOk = false;
+    problemas.push('Sidebar.html -> arquivo HTML "Sidebar" nao encontrado. ' +
+      'Ele precisa existir como arquivo HTML com esse nome exato.');
+  }
+
+  var ok = !problemas.length;
+  var mensagem = ok
+    ? 'Instalacao completa: os ' + SENTINELAS.length +
+      ' arquivos de script e o Sidebar.html estao no projeto.'
+    : ['INSTALACAO INCOMPLETA - ' + problemas.length + ' problema(s):',
+       '',
+       '- ' + problemas.join('\n- '),
+       '',
+       'Copie do repositorio os arquivos apontados acima e rode esta',
+       'verificacao de novo. Com clasp, um "clasp push" resolve tudo de uma vez.'
+      ].join('\n');
+
+  if (ok) {
+    console.log(mensagem);
+  } else {
+    console.error(mensagem);
+    try {
+      logAviso('verificarInstalacao', 'Instalacao incompleta', problemas);
+    } catch (e) { /* a aba Logs pode nem existir ainda */ }
+  }
+
+  return { ok: ok, problemas: problemas, sidebarOk: sidebarOk, mensagem: mensagem };
+}
+
+// ===========================================================================
 // SETUP PRINCIPAL
 // ===========================================================================
 
@@ -77,6 +181,17 @@ function setupFinanceiro(opcoes) {
   var relatorio = { abasCriadas: [], acoes: [] };
 
   try {
+    // Falhar cedo e com nome: um arquivo faltando produz "X is not defined"
+    // no meio da execucao, que nao diz nada a quem esta instalando.
+    var instalacao = verificarInstalacao();
+    if (!instalacao.ok) {
+      return {
+        sucesso: false,
+        mensagem: instalacao.mensagem,
+        detalhes: { instalacao: instalacao }
+      };
+    }
+
     return comLock(function () {
       var planilha = obterPlanilha();
 

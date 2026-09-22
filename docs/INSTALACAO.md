@@ -214,6 +214,7 @@ Há duas leituras diferentes, e vale saber qual usar:
 | Sintoma | Causa e solução |
 |---|---|
 | Menu **Financeiro** não aparece | Recarregue a planilha. Se persistir, rode `onOpen` manualmente no editor. |
+| `<nome da função> is not defined` | Algum arquivo não foi copiado, ou foi colado pela metade. Rode **`Dados → Verificar instalação`** (ou a função `verificarInstalacao` no editor): ela diz exatamente qual arquivo falta. |
 | "Sistema ocupado com outra operação" | Duas operações simultâneas. Aguarde alguns segundos. |
 | "Chave de API ausente" | A propriedade do script não foi salva, ou o nome está diferente de `GEMINI_API_KEY`/`GROQ_API_KEY`. |
 | "Limite de requisições (429)" | Free tier atingido. O sistema já caiu no fallback por regras; tente mais tarde. |

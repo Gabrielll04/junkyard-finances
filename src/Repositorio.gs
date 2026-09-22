@@ -689,6 +689,25 @@ function validarValorMonetario(valor, opcoes) {
 }
 
 /**
+ * Sanidade de data: recusa ano digitado errado (0202, 9999) e datas absurdas.
+ * Aceita de 1990 ate 50 anos no futuro.
+ *
+ * Mora aqui, e nao no modulo que a usa, porque e chamada tanto por
+ * Financeiro.gs quanto por Metas.gs. Utilitario compartilhado pertence a
+ * camada compartilhada.
+ *
+ * @param {Date|string|number} data
+ * @return {boolean}
+ */
+function dataPlausivel(data) {
+  var d = converterParaData(data);
+  if (!d) return false;
+  var ano = d.getFullYear();
+  var anoAtual = new Date().getFullYear();
+  return ano >= 1990 && ano <= anoAtual + 50;
+}
+
+/**
  * Converte texto/numero para number, tolerando formato pt-BR.
  * @param {*} valor
  * @return {number} NaN se nao converter.

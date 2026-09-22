@@ -79,6 +79,7 @@ function criarMenu() {
     .addItem('Remover atualizacao diaria', 'menuRemoverTriggers');
 
   var menuDados = ui.createMenu('Dados')
+    .addItem('Verificar instalacao', 'menuVerificarInstalacao')
     .addItem('Validar dados', 'menuValidarDados')
     .addItem('Recalcular tudo', 'menuRecalcularTudo')
     .addSeparator()
@@ -1086,6 +1087,13 @@ function menuInstalarTriggers() {
 function menuRemoverTriggers() {
   _executarAcaoDeMenu('menuRemoverTriggers', function () {
     return removerTriggers().mensagem;
+  });
+}
+
+/** Confere se todos os arquivos do projeto foram copiados. */
+function menuVerificarInstalacao() {
+  _executarAcaoDeMenu('menuVerificarInstalacao', function () {
+    return verificarInstalacao().mensagem;
   });
 }
 

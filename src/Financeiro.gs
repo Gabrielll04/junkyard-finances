@@ -70,7 +70,7 @@ function _inserirLancamento(payload, opcoes) {
   if (!data) {
     throw new Error('Data invalida. Use o formato dd/mm/aaaa.');
   }
-  if (!_dataDentroDeLimitesRazoaveis(data)) {
+  if (!dataPlausivel(data)) {
     throw new Error('Data fora de um intervalo plausivel (verifique o ano digitado).');
   }
   var limiteFuturo = obterConfigNumero('dias_futuro_permitidos', 370);
@@ -326,7 +326,7 @@ function editarLancamento(idLancamento, payload) {
     if (dados.data !== undefined && String(dados.data).trim() !== '') {
       var data = converterParaData(dados.data);
       if (!data) throw new Error('Data invalida. Use o formato dd/mm/aaaa.');
-      if (!_dataDentroDeLimitesRazoaveis(data)) {
+      if (!dataPlausivel(data)) {
         throw new Error('Data fora de um intervalo plausivel.');
       }
       campos.data = data;

@@ -546,7 +546,7 @@ function _movimentarMeta(metaId, valor, data, descricao, tipoMovimento, origem) 
 
   var valorValidado = validarValorMonetario(valor);
   var dataMovimento = converterParaData(data) || new Date();
-  if (!_dataDentroDeLimitesRazoaveis(dataMovimento)) {
+  if (!dataPlausivel(dataMovimento)) {
     throw new Error('Data do movimento fora de um intervalo plausivel.');
   }
 
@@ -719,17 +719,4 @@ function atualizarCamposCalculadosMetas() {
   } catch (e) {
     logErro('atualizarCamposCalculadosMetas', 'Falha ao atualizar campos calculados', e.message);
   }
-}
-
-/**
- * Sanidade de datas: evita digitacao do tipo ano 0202 ou 9999.
- * @param {Date} data
- * @return {boolean}
- * @private
- */
-function _dataDentroDeLimitesRazoaveis(data) {
-  if (!data) return false;
-  var ano = data.getFullYear();
-  var anoAtual = new Date().getFullYear();
-  return ano >= 1990 && ano <= anoAtual + 50;
 }

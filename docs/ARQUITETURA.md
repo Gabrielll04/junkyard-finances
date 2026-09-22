@@ -195,6 +195,24 @@ Mede a folga real do mês e não depende de o usuário ter lembrado de registrar
 aporte. O indicador complementar `percentual_guardado = aportes / receitas`
 mede quanto foi efetivamente para as caixinhas. Ambos aparecem no painel.
 
+**Utilitário compartilhado mora na camada compartilhada.**
+`dataPlausivel()` fica em `Repositorio.gs` porque `Financeiro.gs` e `Metas.gs`
+a chamam. Ela já esteve em `Metas.gs` como função privada, e isso criava um
+acoplamento invisível: um projeto sem `Metas.gs` registrava metas... e quebrava
+ao lançar uma despesa, com `_dataDentroDeLimitesRazoaveis is not defined`. As
+únicas travessias de fronteira que restam são deliberadas e documentadas — os
+núcleos sem lock (`_inserirLancamento`, `_movimentarMeta`), que existem para
+poder compor operações sob um único lock.
+
+**A instalação se verifica sozinha.**
+No Apps Script todos os arquivos compartilham o escopo global, então um arquivo
+que não foi copiado não dá erro nenhum na instalação: ele só aparece como
+`X is not defined` no meio de uma operação, às vezes dias depois.
+`verificarInstalacao()` referencia funções-sentinela de cada arquivo dentro de
+um `try`; o `ReferenceError` que nasce daí já carrega o nome do identificador
+que faltou. `setupFinanceiro()` roda essa checagem antes de qualquer coisa e
+recusa começar com o projeto incompleto.
+
 **Escrita em lote, sempre.**
 `lerTabela()` faz um `getValues()` da tabela inteira e devolve objetos com
 `_linha`. `adicionarLinhas()` e `atualizarCamposCalculadosMetas()` escrevem

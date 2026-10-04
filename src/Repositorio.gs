@@ -587,16 +587,37 @@ function escreverIntervalo(nomeAba, linha, coluna, matriz) {
 // ===========================================================================
 
 /**
- * Gera um ID legivel e praticamente unico: PREFIXO-AAAAMMDD-HHMMSS-XXXX.
+ * Gera um ID legivel e unico: PREFIXO-AAAAMMDD-HHMMSS-SSSXXXXX, onde SSS e
+ * um contador da execucao e XXXXX e aleatorio.
  * @param {string} prefixo
  * @return {string}
  */
 function gerarId(prefixo) {
   var agora = new Date();
   var carimbo = Utilities.formatDate(agora, obterFusoHorario(), 'yyyyMMdd-HHmmss');
-  var aleatorio = Math.floor(Math.random() * 9000 + 1000);
-  return prefixo + '-' + carimbo + '-' + aleatorio;
+
+  // Contador da execucao: garante IDs distintos mesmo com centenas de
+  // registros criados no mesmo segundo (dados de exemplo, geracao de
+  // recorrencias). Antes eram so 4 digitos aleatorios, e com ~25 registros
+  // no mesmo segundo a chance de repetir passava de 3% - e um ID repetido
+  // faz editar ou cancelar atingir o registro errado.
+  _sequenciaIds++;
+  var sequencia = ('00' + _sequenciaIds.toString(36)).slice(-3).toUpperCase();
+
+  // Parte aleatoria em base 36 (~60 milhoes de combinacoes), para execucoes
+  // diferentes que caiam no mesmo segundo.
+  var aleatorio = ('0000' + Math.floor(Math.random() * 60466176).toString(36))
+    .slice(-5).toUpperCase();
+
+  return prefixo + '-' + carimbo + '-' + sequencia + aleatorio;
 }
+
+/**
+ * Contador de IDs gerados nesta execucao. Fica fora de _MEMO de proposito:
+ * invalidar a memoria nao pode reinicia-lo.
+ * @private
+ */
+var _sequenciaIds = 0;
 
 // ===========================================================================
 // CONFIGURACAO (aba Config)

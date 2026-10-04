@@ -31,7 +31,7 @@ console.log('privadas cruzando arquivos: verificado');
 const todas = new Set(); arqs.forEach(f => { for (const m of txt[f].matchAll(/^function ([\w$]+)/gm)) todas.add(m[1]); });
 const bloco = txt['Setup.gs'].slice(txt['Setup.gs'].indexOf('var SENTINELAS = ['), txt['Setup.gs'].indexOf('function verificarInstalacao'));
 let qtd = 0;
-for (const m of bloco.matchAll(/return \[([^\]]+)\]/g)) m[1].split(',').map(s => s.trim()).filter(Boolean).forEach(n => { qtd++; if (!todas.has(n)) falha('sentinela inexistente: ' + n); });
+for (const m of bloco.matchAll(/return \[([^\]]+)\]/g)) m[1].replace(/\/\/.*$/gm, '').split(',').map(s => s.trim()).filter(Boolean).forEach(n => { qtd++; if (!todas.has(n)) falha('sentinela inexistente: ' + n); });
 console.log('sentinelas: ' + qtd + ' verificadas');
 
 console.log(falhas ? '\n' + falhas + ' problema(s)' : '\nauditoria limpa');

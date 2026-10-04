@@ -1116,6 +1116,19 @@ function testIntegridadeDados() {
     t.afirmarErro(function () { validarValorMonetario(-1); }, 'negativo deve ser rejeitado');
     t.afirmarErro(function () { validarValorMonetario('abc'); }, 'texto deve ser rejeitado');
 
+    // IDs unicos mesmo criados em rajada, no mesmo segundo. Regressao: com
+    // 4 digitos aleatorios, ~25 registros no mesmo segundo repetiam ID em ~3%
+    // das vezes (aconteceu nos dados de exemplo).
+    var ids = {};
+    var repetidos = 0;
+    for (var n = 0; n < 2000; n++) {
+      var novoId = gerarId(PREFIXOS_ID.LANCAMENTO);
+      if (ids[novoId]) repetidos++;
+      ids[novoId] = true;
+    }
+    t.afirmarIgual(repetidos, 0, '2000 IDs gerados em sequencia sem repeticao');
+    t.afirmar(/^LAN-\d{8}-\d{6}-[0-9A-Z]{8}$/.test(novoId), 'formato do ID: ' + novoId);
+
     // Periodos.
     t.afirmarIgual(deslocarMes('2024-01', -1), '2023-12', 'deslocamento para tras vira o ano');
     t.afirmarIgual(deslocarMes('2024-12', 1), '2025-01', 'deslocamento para frente vira o ano');

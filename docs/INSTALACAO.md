@@ -214,6 +214,7 @@ Há duas leituras diferentes, e vale saber qual usar:
 | Sintoma | Causa e solução |
 |---|---|
 | Menu **Financeiro** não aparece | Recarregue a planilha. Se persistir, rode `onOpen` manualmente no editor. |
+| Sidebar mostra `PERMISSION_DENIED` / "erro no servidor durante a leitura do armazenamento", e a lista de categorias fica vazia | **Mais de uma conta Google logada no navegador.** O `google.script.run` da sidebar é enviado com a conta errada — limitação conhecida do Google, não erro do sistema. Abra a planilha numa **janela anônima** ou num **perfil do Chrome** com só a conta dona da planilha. O menu `Financeiro → Registrar despesa` não usa esse canal e continua funcionando. |
 | `<nome da função> is not defined` | Algum arquivo não foi copiado, ou foi colado pela metade. Rode **`Dados → Verificar instalação`** (ou a função `verificarInstalacao` no editor): ela diz exatamente qual arquivo falta. |
 | "Sistema ocupado com outra operação" | Duas operações simultâneas. Aguarde alguns segundos. |
 | "Chave de API ausente" | A propriedade do script não foi salva, ou o nome está diferente de `GEMINI_API_KEY`/`GROQ_API_KEY`. |

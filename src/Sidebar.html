@@ -451,12 +451,35 @@ function chamarServidor(funcao, argumento, aoSucesso, aoErro) {
         return;
       }
       if (resposta.sucesso) aoSucesso(resposta.dados);
-      else if (aoErro) aoErro(resposta.mensagem || 'Erro desconhecido.');
+      else if (aoErro) aoErro(traduzirErroCliente(resposta.mensagem || 'Erro desconhecido.'));
     })
     .withFailureHandler(function (erro) {
       definirCarregando(false);
-      if (aoErro) aoErro((erro && erro.message) ? erro.message : String(erro));
+      var texto = (erro && erro.message) ? erro.message : String(erro);
+      if (aoErro) aoErro(traduzirErroCliente(texto));
     })[funcao](argumento);
+}
+
+/**
+ * Troca erros conhecidos do Google por uma explicacao acionavel.
+ *
+ * O caso principal: com MAIS DE UMA conta Google logada no navegador, o
+ * google.script.run da sidebar e enviado com a conta errada e o Google
+ * responde "server error occurred while reading from storage" /
+ * PERMISSION_DENIED. Nao e erro do sistema nem dos dados - e uma limitacao
+ * conhecida do Google, e a mensagem crua nao da pista nenhuma disso.
+ */
+function traduzirErroCliente(mensagem) {
+  var texto = String(mensagem || '');
+  if (/PERMISSION_DENIED|reading from storage|leitura do armazenamento/i.test(texto)) {
+    return 'O Google bloqueou o painel porque este navegador tem MAIS DE UMA ' +
+      'conta Google logada. E uma limitacao conhecida do Google, nao um erro ' +
+      'nos seus dados.\n\n' +
+      'Para resolver: abra a planilha numa janela anonima, ou num perfil do ' +
+      'Chrome, com apenas a conta dona da planilha.\n\n' +
+      'Enquanto isso, o menu Financeiro > Registrar despesa funciona normalmente.';
+  }
+  return texto;
 }
 
 /** Converte "1.234,56" ou "1234.56" em numero. Retorna NaN se invalido. */

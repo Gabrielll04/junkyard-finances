@@ -163,6 +163,21 @@
     }
     .filtros { display: flex; gap: 6px; margin-bottom: 8px; }
 
+    /* --- contas --- */
+    .conta {
+      border: 1px solid var(--borda); border-radius: 6px; padding: 8px;
+      margin-bottom: 8px; background: #fff;
+    }
+    .conta.pendente { border-color: var(--amarelo); background: #fffbea; }
+    .conta .topo { display: flex; justify-content: space-between; align-items: baseline; }
+    .conta .nome { font-weight: 600; font-size: 12px; }
+    .conta .saldo { font-size: 18px; font-weight: 700; color: var(--verde); }
+    .conta .saldo.negativo { color: var(--vermelho); }
+    .conta .detalhe { font-size: 11px; color: var(--cinza); margin-top: 3px; }
+    .linha-inline { display: flex; gap: 6px; margin-top: 6px; }
+    .linha-inline input { flex: 1; }
+    .linha-inline button { white-space: nowrap; }
+
     /* --- tags --- */
     .tag {
       display: inline-block; padding: 1px 7px; margin: 2px 3px 0 0;
@@ -209,7 +224,11 @@
 
   <!-- ================= PAINEL ================= -->
   <section id="aba-painel" class="ativa">
-    <h2>Resumo do mes</h2>
+    <h2>Saldo em conta</h2>
+    <div id="blocoContas"></div>
+    <div class="mensagem" id="msgContas"></div>
+
+    <h2 style="margin-top:14px">Resumo do mes</h2>
     <div class="kpis" id="kpis"></div>
 
     <h3>Reserva de emergencia</h3>
@@ -258,6 +277,11 @@
 
       <label for="lancDescricao">Descricao (opcional)</label>
       <input type="text" id="lancDescricao" maxlength="200">
+
+      <div id="blocoLancConta">
+        <label for="lancConta" id="rotuloLancConta">Conta</label>
+        <select id="lancConta"></select>
+      </div>
 
       <label for="lancTags">Tags (opcional, separe por virgula)</label>
       <input type="text" id="lancTags" maxlength="200" placeholder="Ex.: luz, apartamento">
@@ -345,6 +369,11 @@
           <label for="movValor">Valor</label>
           <input type="text" id="movValor" placeholder="0,00" inputmode="decimal" required>
         </div>
+      </div>
+
+      <div id="blocoMovConta">
+        <label for="movConta">Conta (aporte sai dela, resgate volta para ela)</label>
+        <select id="movConta"></select>
       </div>
 
       <label for="movData">Data</label>
@@ -610,6 +639,8 @@ function renderizar(estado) {
   preencherSelecoesDeMeta(estado.metas);
   preencherCategorias();
   renderizarInsights(estado.insights, estado.statusIa);
+  renderizarContas(estado.contas, estado.saldoTotalContas);
+  preencherSelectsDeConta(estado.contas);
   renderizarTagsDoMes(estado.tagsDoMes);
   preencherFiltroTags(estado.tagsConhecidas);
   renderizarSugestoesTags('sugestoesTagsLanc', 'lancTags');
@@ -635,6 +666,8 @@ function renderizarExtrato(lista) {
       : (l.tipo === 'DESPESA') ? 'despesa' : '';
 
     var info = l.data + ' - ' + l.tipo.replace('_', ' ') + ' - ' + escapar(l.categoria);
+    var nomeConta = nomeDaConta(l.contaId);
+    if (nomeConta && (estadoAtual.contas || []).length > 1) info += ' - ' + escapar(nomeConta);
     if (l.origem && l.origem.indexOf('RECORRENTE:') === 0) info += ' - recorrente';
     var tagsHtml = (l.tags || []).map(function (t) {
       return '<span class="tag" data-filtrar-tag="' + escapar(t) + '" title="Filtrar por esta tag">' +
@@ -701,6 +734,14 @@ function abrirEdicaoLancamento(id) {
       '<label for="edDescricao">Descricao</label>' +
       '<input type="text" id="edDescricao" maxlength="200" value="' +
         escapar(lancamento.descricao) + '">' +
+      ((estadoAtual.contas || []).length > 1
+        ? '<label for="edConta">Conta</label><select id="edConta">' +
+          estadoAtual.contas.map(function (c) {
+            var atual = c.id === lancamento.contaId || (!lancamento.contaId && c.padrao);
+            return '<option value="' + escapar(c.id) + '"' + (atual ? ' selected' : '') + '>' +
+              escapar(c.nome) + '</option>';
+          }).join('') + '</select>'
+        : '') +
       '<label for="edTags">Tags (separe por virgula)</label>' +
       '<input type="text" id="edTags" maxlength="200" value="' +
         escapar((lancamento.tags || []).join(', ')) + '">' +
@@ -734,6 +775,85 @@ function recarregarExtrato() {
   }, function (erro) {
     mostrarMensagem('msgExtrato', erro, 'erro');
   });
+}
+
+/* ---------------------------- CONTAS ---------------------------- */
+
+/** Nome de uma conta pelo ID (vazio = conta padrao). */
+function nomeDaConta(id) {
+  var contas = (estadoAtual && estadoAtual.contas) || [];
+  var conta = contas.filter(function (c) { return id ? c.id === id : c.padrao; })[0];
+  return conta ? conta.nome : '';
+}
+
+/** Bloco "Saldo em conta" do painel. */
+function renderizarContas(contas, total) {
+  var container = document.getElementById('blocoContas');
+  contas = contas || [];
+
+  var html = contas.map(function (c) {
+    var corpo;
+    if (!c.configurada) {
+      corpo = '<div class="detalhe">Informe quanto ha na conta agora. A partir dai, ' +
+        'receitas somam e despesas subtraem. Lancamentos anteriores nao sao ' +
+        'descontados de novo.</div>';
+    } else {
+      corpo = '<div class="saldo' + (c.saldoNegativo ? ' negativo' : '') + '">' +
+        escapar(c.saldoAtual) + '</div>' +
+        (c.saldoPrevisto ? '<div class="detalhe">Com lancamentos agendados: ' +
+          escapar(c.saldoPrevisto) + '</div>' : '') +
+        '<div class="detalhe">Contando lancamentos desde ' + escapar(c.dataReferencia) + '</div>';
+    }
+    return '<div class="conta' + (c.configurada ? '' : ' pendente') + '">' +
+      '<div class="topo"><span class="nome">' + escapar(c.nome) +
+      (c.padrao && contas.length > 1 ? ' <span class="chip">padrao</span>' : '') + '</span>' +
+      '<button type="button" class="mini' + (c.configurada ? '' : ' destaque') +
+      '" data-abrir-saldo="' + escapar(c.id) + '">' +
+      (c.configurada ? 'Corrigir saldo' : 'Informar saldo') + '</button></div>' +
+      corpo +
+      '<div class="linha-inline" data-form-saldo="' + escapar(c.id) + '" style="display:none">' +
+        '<input type="text" inputmode="decimal" placeholder="Saldo real agora, ex.: 1.250,00">' +
+        '<button type="button" class="mini destaque" data-salvar-saldo="' + escapar(c.id) +
+        '">Salvar</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  if (contas.length > 1 && total) {
+    html += '<div class="detalhe" style="text-align:right;margin-bottom:6px">Total: <strong>' +
+      escapar(total) + '</strong></div>';
+  }
+  html += '<button type="button" class="mini" data-abrir-nova-conta="1">+ Nova conta</button>' +
+    '<div class="edicao" id="formNovaConta" style="display:none;margin-top:6px">' +
+      '<label for="novaContaNome">Nome</label>' +
+      '<input type="text" id="novaContaNome" maxlength="60" placeholder="Ex.: Nubank, Carteira">' +
+      '<label for="novaContaSaldo">Saldo atual (opcional)</label>' +
+      '<input type="text" id="novaContaSaldo" inputmode="decimal" placeholder="0,00">' +
+      '<div class="caixa-marcacao"><input type="checkbox" id="novaContaPadrao">' +
+      '<label for="novaContaPadrao">Usar como conta padrao</label></div>' +
+      '<div class="botoes" style="margin-top:8px">' +
+        '<button type="button" class="mini destaque" data-criar-conta="1">Criar conta</button>' +
+      '</div>' +
+    '</div>';
+  container.innerHTML = html;
+}
+
+/** Preenche os seletores de conta. Com uma conta so, eles ficam ocultos. */
+function preencherSelectsDeConta(contas) {
+  contas = contas || [];
+  [['lancConta', 'blocoLancConta'], ['movConta', 'blocoMovConta']].forEach(function (par) {
+    var select = document.getElementById(par[0]);
+    var anterior = select.value;
+    select.innerHTML = contas.map(function (c) {
+      return '<option value="' + escapar(c.id) + '"' + (c.padrao ? ' selected' : '') + '>' +
+        escapar(c.nome) + '</option>';
+    }).join('');
+    if (anterior && contas.some(function (c) { return c.id === anterior; })) select.value = anterior;
+    document.getElementById(par[1]).style.display = contas.length > 1 ? '' : 'none';
+  });
+  var tipo = document.getElementById('lancTipo').value;
+  document.getElementById('rotuloLancConta').textContent =
+    tipo === 'RECEITA' ? 'Entrou em qual conta' : 'Saiu de qual conta';
 }
 
 /* ---------------------------- TAGS ---------------------------- */
@@ -1038,6 +1158,7 @@ document.getElementById('formLancamento').addEventListener('submit', function (e
     categoria: categoria,
     descricao: document.getElementById('lancDescricao').value.trim(),
     tags: document.getElementById('lancTags').value,
+    conta: document.getElementById('lancConta').value,
     repetir: repetir,
     frequencia_meses: parseInt(document.getElementById('lancFrequencia').value, 10)
   }, function (dados) {
@@ -1084,7 +1205,8 @@ document.getElementById('formMovimento').addEventListener('submit', function (ev
     operacao: document.getElementById('movOperacao').value,
     valor: valor,
     data: document.getElementById('movData').value,
-    descricao: document.getElementById('movDescricao').value.trim()
+    descricao: document.getElementById('movDescricao').value.trim(),
+    conta: document.getElementById('movConta').value
   }, function (dados) {
     mostrarMensagem('msgMovimento',
       'Novo saldo de "' + dados.nome + '": ' + dados.saldo +
@@ -1270,6 +1392,59 @@ document.addEventListener('click', function (evento) {
   }
 });
 
+// Contas: abrir/salvar saldo e criar conta (delegacao, o bloco e redesenhado).
+document.getElementById('blocoContas').addEventListener('click', function (evento) {
+  var abrir = evento.target.closest('[data-abrir-saldo]');
+  if (abrir) {
+    var form = document.querySelector('[data-form-saldo="' + abrir.dataset.abrirSaldo + '"]');
+    form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+    if (form.style.display === 'flex') form.querySelector('input').focus();
+    return;
+  }
+  var salvar = evento.target.closest('[data-salvar-saldo]');
+  if (salvar) {
+    limparMensagem('msgContas');
+    var campo = document.querySelector('[data-form-saldo="' + salvar.dataset.salvarSaldo + '"] input');
+    var valor = paraNumeroCliente(campo.value);
+    if (isNaN(valor)) {
+      mostrarMensagem('msgContas', 'Informe o saldo (pode ser zero ou negativo).', 'erro');
+      return;
+    }
+    chamarServidor('uiDefinirSaldoConta', { id: salvar.dataset.salvarSaldo, saldo: valor },
+      function (r) {
+        mostrarMensagem('msgContas', 'Saldo de "' + r.nome + '" definido: ' + r.saldo + '.', 'ok');
+        aplicarEstado(r);
+      }, function (erro) { mostrarMensagem('msgContas', erro, 'erro'); });
+    return;
+  }
+  if (evento.target.closest('[data-abrir-nova-conta]')) {
+    var f = document.getElementById('formNovaConta');
+    f.style.display = f.style.display === 'none' ? 'block' : 'none';
+    return;
+  }
+  if (evento.target.closest('[data-criar-conta]')) {
+    limparMensagem('msgContas');
+    var nome = document.getElementById('novaContaNome').value.trim();
+    if (!nome) { mostrarMensagem('msgContas', 'Informe o nome da conta.', 'erro'); return; }
+    var saldoTexto = document.getElementById('novaContaSaldo').value.trim();
+    var saldo = saldoTexto ? paraNumeroCliente(saldoTexto) : '';
+    if (saldoTexto && isNaN(saldo)) {
+      mostrarMensagem('msgContas', 'Saldo invalido.', 'erro'); return;
+    }
+    chamarServidor('uiCriarConta', {
+      nome: nome, saldo_atual: saldo,
+      padrao: document.getElementById('novaContaPadrao').checked
+    }, function (r) {
+      mostrarMensagem('msgContas', 'Conta "' + r.nome + '" criada.', 'ok');
+      aplicarEstado(r);
+    }, function (erro) { mostrarMensagem('msgContas', erro, 'erro'); });
+  }
+});
+
+document.getElementById('lancTipo').addEventListener('change', function () {
+  if (estadoAtual) preencherSelectsDeConta(estadoAtual.contas);
+});
+
 // Digitar no campo atualiza os chips (marca/desmarca as ja presentes).
 document.getElementById('lancTags').addEventListener('input', function () {
   renderizarSugestoesTags('sugestoesTagsLanc', 'lancTags');
@@ -1355,7 +1530,8 @@ document.getElementById('formEdicaoLancamento').addEventListener('click', functi
     data: document.getElementById('edData').value,
     categoria: categoria,
     descricao: document.getElementById('edDescricao').value.trim(),
-    tags: document.getElementById('edTags').value
+    tags: document.getElementById('edTags').value,
+    conta: document.getElementById('edConta') ? document.getElementById('edConta').value : undefined
   }, function (dados) {
     mostrarMensagem('msgExtrato', 'Atualizado: ' + dados.texto, 'ok');
     fecharEdicaoLancamento();

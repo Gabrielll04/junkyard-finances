@@ -248,6 +248,28 @@ function gerarIndicadores(mesReferencia) {
     }
   });
 
+  // --- contas ----------------------------------------------------------------
+  try {
+    var contas = resumoDasContas();
+    indicadores.contas = {
+      saldoAtual: contas.atual,
+      saldoPrevisto: contas.previsto,
+      configuradas: contas.configuradas,
+      quantidade: contas.contas.length,
+      lista: contas.contas.map(function (c) {
+        return {
+          id: c.id_conta, nome: c.nome, padrao: c.ehPadrao, configurada: c.configurada,
+          saldoAtual: c.saldoAtual, saldoPrevisto: c.saldoPrevisto,
+          temLancamentoFuturo: c.temLancamentoFuturo,
+          dataReferencia: formatarData(c.data_referencia)
+        };
+      })
+    };
+  } catch (e) {
+    logErro('gerarIndicadores', 'Falha ao calcular saldos das contas', e.message);
+    indicadores.contas = { saldoAtual: 0, saldoPrevisto: 0, configuradas: 0, quantidade: 0, lista: [] };
+  }
+
   indicadores.alertas = _montarAlertas(indicadores);
   return indicadores;
 }
@@ -426,6 +448,14 @@ function _montarAlertas(ind) {
   }
   if (!ind.reserva.existe) {
     alertas.push('Nenhuma meta do tipo RESERVA cadastrada.');
+  }
+  if (ind.contas && ind.contas.configuradas > 0) {
+    if (ind.contas.saldoAtual < 0) {
+      alertas.push('Saldo em conta negativo: ' + formatarMoeda(ind.contas.saldoAtual) + '.');
+    } else if (ind.contas.saldoPrevisto < 0) {
+      alertas.push('Com os lancamentos ja agendados, o saldo em conta fica negativo (' +
+                   formatarMoeda(ind.contas.saldoPrevisto) + ').');
+    }
   }
   ind.orcamentosEstourados.forEach(function (o) {
     alertas.push('Orcamento de "' + o.categoria + '" estourado: ' +

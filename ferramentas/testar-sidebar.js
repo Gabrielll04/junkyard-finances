@@ -96,6 +96,36 @@ const clicar = (el) => el.dispatchEvent(new w.MouseEvent('click', { bubbles: tru
   conferir($('filtroTag').value === 'luz' && itens().length === 1, 'filtro continua aplicado depois de editar (bug antigo corrigido)');
   conferir(!/apartamento/.test($('listaTags').textContent), 'tag removida sai do painel');
 
+  console.log('SALDO EM CONTA');
+  const blocoContas = () => $('blocoContas');
+  conferir(/Informar saldo/.test(blocoContas().textContent), 'conta sem saldo pede para informar');
+  conferir($('blocoLancConta').style.display === 'none', 'com uma conta so, o seletor de conta fica oculto');
+  clicar(blocoContas().querySelector('[data-abrir-saldo]'));
+  blocoContas().querySelector('[data-form-saldo] input').value = '2.000,00';
+  clicar(blocoContas().querySelector('[data-salvar-saldo]')); await esperar();
+  conferir(/R\$ 2\.000,00/.test(blocoContas().textContent), 'saldo informado aparece: ' + blocoContas().querySelector('.saldo').textContent);
+  $('lancTipo').value = 'DESPESA'; $('lancValor').value = '100'; $('lancCategoria').value = 'Assinaturas';
+  $('lancDescricao').value = 'Internet'; $('lancTags').value = '';
+  $('formLancamento').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
+  await esperar();
+  conferir(/R\$ 1\.900,00/.test(blocoContas().textContent), 'despesa desconta do saldo na hora');
+
+  clicar(blocoContas().querySelector('[data-abrir-nova-conta]'));
+  $('novaContaNome').value = 'Nubank'; $('novaContaSaldo').value = '500';
+  clicar(blocoContas().querySelector('[data-criar-conta]')); await esperar();
+  conferir(blocoContas().querySelectorAll('.conta').length === 2, 'segunda conta criada');
+  conferir($('blocoLancConta').style.display === '', 'com duas contas, o seletor aparece');
+  conferir(/Total: R\$ 2\.400,00/.test(blocoContas().textContent), 'total das contas');
+  const idNubank = [...$('lancConta').options].find(o => o.text === 'Nubank').value;
+  $('lancConta').value = idNubank; $('lancValor').value = '50'; $('lancDescricao').value = 'Lanche';
+  $('formLancamento').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
+  await esperar();
+  const saldos = [...blocoContas().querySelectorAll('.conta')].map(c => c.querySelector('.nome').textContent.trim().split(' ')[0] + '=' + c.querySelector('.saldo').textContent);
+  conferir(saldos.join(' ') === 'Conta=R$ 1.900,00 Nubank=R$ 450,00', 'despesa sai so da conta escolhida: ' + saldos.join(' '));
+  $('filtroTag').value = ''; $('filtroTipo').value = ''; await esperar(5);
+  const itemLanche = itens().find(i => /Lanche/.test(i.textContent)) || (await (async () => { $('btnAtualizar').click(); await esperar(); return itens().find(i => /Lanche/.test(i.textContent)); })());
+  conferir(itemLanche && /Nubank/.test(itemLanche.textContent), 'extrato mostra a conta do lancamento');
+
   console.log('ERRO DE MULTIPLAS CONTAS');
   falharProxima = 'Ocorreu um erro no servidor durante a leitura do armazenamento. Código do erro: PERMISSION_DENIED.';
   $('lancValor').value = '10'; $('lancCategoria').value = 'Mercado';

@@ -480,13 +480,14 @@ function excluirMeta(metaId, modo, confirmacaoTotal) {
  * @param {Date|string=} data Padrao hoje.
  * @param {string=} descricao
  * @param {string=} origem Padrao 'MANUAL'.
+ * @param {string=} conta ID ou nome da conta de onde sai o dinheiro (padrao: conta padrao).
  * @return {{id_movimento: string, id_lancamento: string, saldoAtual: number,
  *           progressoPercentual: number, meta: Object}}
  */
-function aportarEmMeta(metaId, valor, data, descricao, origem) {
+function aportarEmMeta(metaId, valor, data, descricao, origem, conta) {
   return comLock(function () {
     return _movimentarMeta(metaId, valor, data, descricao,
-                           TIPOS_MOVIMENTO_META.APORTE, origem);
+                           TIPOS_MOVIMENTO_META.APORTE, origem, conta);
   });
 }
 
@@ -499,10 +500,10 @@ function aportarEmMeta(metaId, valor, data, descricao, origem) {
  * @param {string=} origem
  * @return {Object}
  */
-function resgatarDaMeta(metaId, valor, data, descricao, origem) {
+function resgatarDaMeta(metaId, valor, data, descricao, origem, conta) {
   return comLock(function () {
     return _movimentarMeta(metaId, valor, data, descricao,
-                           TIPOS_MOVIMENTO_META.RESGATE, origem);
+                           TIPOS_MOVIMENTO_META.RESGATE, origem, conta);
   });
 }
 
@@ -535,7 +536,7 @@ function ajustarSaldoMeta(metaId, valor, positivo, descricao) {
  * @return {Object}
  * @private
  */
-function _movimentarMeta(metaId, valor, data, descricao, tipoMovimento, origem) {
+function _movimentarMeta(metaId, valor, data, descricao, tipoMovimento, origem, conta) {
   var metaBruta = buscarPorId(ABAS.METAS, 'id_meta', metaId);
   if (!metaBruta) throw new Error('Meta nao encontrada: ' + metaId);
 
@@ -599,7 +600,9 @@ function _movimentarMeta(metaId, valor, data, descricao, tipoMovimento, origem) 
       meta_id: metaBruta.id_meta,
       descricao: textoDescricao + ' - ' + metaBruta.nome,
       origem: 'META:' + idMovimento,
-      status: 'CONFIRMADO'
+      status: 'CONFIRMADO',
+      // Aporte tira da conta, resgate devolve. Sem conta: a padrao.
+      conta: conta || ''
     }, { permitirDuplicado: true });
     idLancamento = lancamento.id_lancamento;
   }

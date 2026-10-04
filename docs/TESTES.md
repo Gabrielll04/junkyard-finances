@@ -10,7 +10,7 @@ de `src/` contra uma planilha em memória e conta cada ida ao Google.
 ```bash
 cd ferramentas
 npm install
-npm test          # auditoria + 15 testes de servidor + 21 de sidebar
+npm test          # auditoria + 16 testes de servidor + 30 de sidebar
 npm run medir     # custo de um lancamento rapido, em idas ao Google
 ```
 
@@ -49,7 +49,7 @@ Os testes rodam na sua planilha real, mas:
 Ainda assim, rode os testes antes de acumular meses de dados reais, ou faça um
 backup por `Dados → Backup / exportar`.
 
-## 4.2 As 15 funções de teste
+## 4.2 As 16 funções de teste
 
 | Função | O que valida |
 |---|---|
@@ -63,6 +63,7 @@ backup por `Dados → Backup / exportar`.
 | `testEditarExcluirLancamento` | Edição de valor/categoria/descrição com ID preservado e total do mês recalculado; rejeição de data inválida, valor negativo, conversão para `APORTE_META` e ID inexistente; cancelar → reativar; espelho de meta recusa edição **e** exclusão, com saldo intacto; `HARD` sem confirmação é recusado, com confirmação apaga a linha. |
 | `testRecorrentes` | Criação; geração de exatamente 4 ocorrências vencidas; **idempotência** (segunda execução cria 0 e pula 4); total do mês não dobra; chaves de origem únicas; contador e próxima ocorrência; desativar/reativar; validações (descrição, tipo, valor, frequência, aporte sem meta, data final < início); dia 31 em fevereiro/abril; data final corta a geração; frequência trimestral; aporte recorrente grava em `Metas_Movimentos` e entra no saldo; comprometimento mensal normalizado; exclusão da regra preserva os lançamentos gerados. |
 | `testTags` | Normalização (vírgula e ponto e vírgula, `#`, repetidas, caixa e acento); gravação; a pergunta original — água e luz separadas dentro de *Contas fixas*; tag compartilhada somando os dois lançamentos; filtro do extrato; histórico de 6 meses e média só nos meses com gasto; edição e remoção de tags sem afetar outros campos; sugestões; recorrência passando as tags para o lançamento gerado. |
+| `testContas` | Criação com e sem saldo; receita soma, despesa subtrai, cancelado não mexe; **despesa anterior à data do saldo não é descontada de novo**; lançamento futuro fora do saldo atual e dentro do previsto; aporte tira da conta e resgate devolve; transferência entre contas; conta inexistente e transferência para a mesma conta recusadas; editar valor, conta e tipo; **reconciliação bate exatamente** mesmo com lançamentos do dia; saldo negativo; lançamento sem conta grava o ID da padrão. |
 | `testAporteMeta` | Saldo e progresso após aporte, espelho `APORTE_META` criado, **aporte não vira receita nem despesa**, acúmulo de aportes, rejeições, meta vira `CONCLUIDA` ao atingir o alvo. |
 | `testResgateMeta` | Saldo após resgate, espelho `RESGATE_META`, bloqueio por saldo insuficiente, saldo intacto após rejeição. |
 | `testIndicadores` | Mês de referência, receitas/despesas incluem o lançado, `saldo = receitas - despesas`, fórmula da taxa de poupança, top-5 categorias, série de 12 meses, blocos de reserva e fixos/variáveis, soma das categorias ≤ despesas, orçamentos. |

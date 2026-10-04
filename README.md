@@ -27,6 +27,7 @@ ele gera sugestões por regras internas.
 | `src/Repositorio.gs` | Acesso ao Sheets: abas, cabeçalhos, leitura/escrita em lote, IDs, cache, lock, formatação, log. |
 | `src/Setup.gs` | Instalação, abas, categorias e configurações padrão, formatos, validações, dados de exemplo, integridade, triggers, backup. |
 | `src/Financeiro.gs` | Lançamentos (receita, despesa, aporte, resgate, transferência), edição, exclusão e categorias. |
+| `src/Contas.gs` | Saldo de conta corrente (e de outras contas): saldo informado + lançamentos a partir dessa data. |
 | `src/Recorrentes.gs` | Lançamentos recorrentes: regras, geração idempotente e comprometimento mensal. |
 | `src/Metas.gs` | CRUD de metas, aportes, resgates, ajustes, saldos e campos calculados. |
 | `src/Previsoes.gs` | Matemática financeira pura: valor futuro, prazo, aporte necessário, taxas, simulações. |
@@ -35,7 +36,7 @@ ele gera sugestões por regras internas.
 | `src/IA.gs` | Integração opcional com Gemini/Groq, cache, retry, parsing tolerante e fallback. |
 | `src/UI.gs` | Menu personalizado, diálogos nativos e funções expostas à sidebar. |
 | `src/Sidebar.html` | Interface HTML embutida (CSS + JS inline, sem dependências externas). |
-| `src/Testes.gs` | 15 funções de teste + execução em bateria, com limpeza automática. |
+| `src/Testes.gs` | 16 funções de teste + execução em bateria, com limpeza automática. |
 | `src/ImportacaoFutura.gs` | Estrutura e stubs para importação de holerites/comprovantes. |
 | `src/Vincular.gs` | **Uso único.** Cria um projeto Apps Script já vinculado a uma planilha e copia o código para ele, via API do Apps Script. Resolve o caso de quem criou um projeto avulso por engano. |
 | `src/appsscript.migracao.json` | Manifesto temporário com os escopos que `Vincular.gs` precisa. |

@@ -236,6 +236,22 @@ painel; a sidebar então pedia o estado inteiro, recalculando tudo do zero. Agor
 `_concluirAlteracaoSidebar()` calcula os indicadores uma vez, atualiza a aba
 Dashboard com eles e devolve o estado pronto na própria resposta.
 
+**Saldo em conta por data de referência, não por histórico completo.**
+O saldo de uma conta é `saldo informado + efeito dos lançamentos com data a
+partir da data em que ele foi informado`. A alternativa — somar todo o histórico
+desde o início — exigiria que o usuário lançasse cada centavo desde sempre, e
+qualquer gasto antigo lançado depois para fins de histórico desfalcaria o saldo.
+Com a data de referência, o passado está embutido no valor informado, e
+"Corrigir saldo" vira uma reconciliação: o saldo de hoje passa a ser exatamente o
+digitado, descontando o efeito dos lançamentos de hoje já registrados.
+
+Aporte e resgate de meta mexem na conta (o dinheiro muda de bolso), mas
+continuam fora de receitas e despesas. Os lançamentos guardam o **ID** da conta,
+não o nome, e lançamento sem conta grava explicitamente o ID da conta padrão do
+momento: trocar a conta padrão depois não muda de conta os lançamentos antigos.
+Lançamentos anteriores a esta funcionalidade, sem conta gravada, caem na conta
+padrão.
+
 **Tag em vez de subcategoria.**
 Subcategoria prende cada gasto a um único galho da árvore. Tag é livre e
 múltipla: `luz, apartamento` permite perguntar pelo gasto de luz e pelo custo do

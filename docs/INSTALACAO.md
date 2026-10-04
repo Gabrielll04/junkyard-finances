@@ -617,3 +617,54 @@ inteira.
 Não precisa fazer nada. No primeiro lançamento com tag, o sistema cria a coluna
 `tags` no **fim** da aba `Lancamentos` — as fórmulas do painel apontam para as
 colunas B, C, D e K e continuam certas — e nenhum dado existente é alterado.
+
+
+## 3.13 Saldo em conta
+
+O topo do painel mostra quanto há na conta. Na primeira vez aparece
+**Informar saldo**: digite o valor que está no app do banco agora.
+
+### Como o saldo anda
+
+| Lançamento | Efeito na conta |
+|---|---|
+| Receita | soma |
+| Despesa | subtrai |
+| Aporte em meta | subtrai (o dinheiro vai para a caixinha) |
+| Resgate de meta | soma (o dinheiro volta da caixinha) |
+| Transferência | sai de uma conta, entra na outra |
+| Cancelado | nada |
+
+**Lançamentos com data anterior ao dia em que você informou o saldo são
+ignorados**: o dinheiro deles já está dentro do valor informado. Por isso dá
+para lançar gastos antigos, para o histórico e as médias, sem que eles sejam
+descontados de novo.
+
+Lançamentos com data **futura** (uma conta agendada) não mexem no saldo de
+hoje: aparecem como *"Com lançamentos agendados"*, o saldo previsto.
+
+### Pagando algo com o dinheiro de uma meta
+
+Faça um **resgate** da meta e lance a **despesa**. O resgate devolve o dinheiro
+para a conta e a despesa o tira: a conta fica igual, a meta diminui, e o gasto
+entra nos totais do mês.
+
+### Quando o saldo não bater com o banco
+
+Clique em **Corrigir saldo** e digite o valor real. O sistema recalibra: o
+saldo de hoje passa a ser exatamente esse valor, e os lançamentos seguintes
+continuam somando e subtraindo. Os gastos de hoje que você já tinha lançado são
+considerados incluídos no valor digitado.
+
+### Mais de uma conta
+
+`+ Nova conta` no painel, ou `Financeiro → Contas → Nova conta` (Nubank,
+carteira...). Com duas ou mais, os formulários de lançamento e de aporte/resgate
+passam a perguntar a conta. Sem escolher, vale a **conta padrão**
+(`Contas → Definir conta padrão`). O painel mostra o total de todas.
+
+### Planilha criada antes das contas
+
+Não precisa fazer nada: a aba `Contas` e a *Conta corrente* são criadas na
+primeira vez que você abre o painel. Lançamentos antigos sem conta contam na
+conta padrão — mas só os de data a partir do dia em que você informar o saldo.

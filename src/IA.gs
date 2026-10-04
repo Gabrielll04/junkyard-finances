@@ -171,6 +171,7 @@ function montarResumoParaIA(indicadores) {
     aportes_no_mes: ind.totalAportado,
     resgates_no_mes: ind.totalResgatado,
     despesa_media_mensal: ind.despesaMediaConfigurada,
+    saldo_em_conta: (ind.contas && ind.contas.configuradas) ? ind.contas.saldoAtual : null,
     variacao_despesas_vs_mes_anterior_percentual: ind.variacaoDespesasPercentual,
     gastos_fixos_percentual: ind.gastosFixosVariaveis.percentualFixos,
     reserva: {

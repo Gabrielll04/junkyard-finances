@@ -88,6 +88,9 @@ var SENTINELAS = [
   { arquivo: 'Recorrentes.gs', testar: function () {
       return [criarRecorrente, gerarLancamentosRecorrentes,
               calcularComprometimentoMensal]; } },
+  { arquivo: 'Contas.gs', testar: function () {
+      return [listarContas, obterContaPadrao, definirSaldoAtual, criarConta,
+              calcularSaldosDasContas]; } },
   { arquivo: 'Metas.gs', testar: function () {
       return [criarMeta, listarMetas, aportarEmMeta, obterMetaReserva,
               atualizarCamposCalculadosMetas]; } },
@@ -199,7 +202,7 @@ function setupFinanceiro(opcoes) {
 
       // 1. Abas e cabecalhos.
       var ordem = [
-        ABAS.DASHBOARD, ABAS.METAS, ABAS.LANCAMENTOS, ABAS.RECORRENTES,
+        ABAS.DASHBOARD, ABAS.CONTAS, ABAS.METAS, ABAS.LANCAMENTOS, ABAS.RECORRENTES,
         ABAS.METAS_MOVIMENTOS, ABAS.CATEGORIAS, ABAS.ORCAMENTOS, ABAS.SIMULACOES,
         ABAS.CONFIG, ABAS.IMPORTACAO, ABAS.LOGS, ABAS.README
       ];
@@ -403,6 +406,9 @@ function aplicarFormatacoes() {
                    campo_calculado_progresso_percentual: '0.0%',
                    campo_calculado_valor_faltante: formatoMoeda,
                    campo_calculado_previsao_meses_restantes: '0' }],
+    [ABAS.CONTAS, { saldo_inicial: formatoMoeda, data_referencia: formatoData,
+                    campo_calculado_saldo_atual: formatoMoeda,
+                    criada_em: formatoDataHora, atualizada_em: formatoDataHora }],
     [ABAS.RECORRENTES, { valor: formatoMoeda, data_inicio: formatoData,
                          data_fim: formatoData, ultima_geracao: formatoData,
                          proxima_geracao: formatoData, dia_do_mes: '0',
@@ -452,6 +458,8 @@ function aplicarValidacoesDeDados() {
     [ABAS.METAS, 'status', [STATUS_META.ATIVA, STATUS_META.INATIVA, STATUS_META.CONCLUIDA]],
     [ABAS.RECORRENTES, 'tipo', TIPOS_RECORRENTE],
     [ABAS.RECORRENTES, 'ativo', ['SIM', 'NAO']],
+    [ABAS.CONTAS, 'ativa', ['SIM', 'NAO']],
+    [ABAS.CONTAS, 'padrao', ['SIM', 'NAO']],
     // A lista precisa ser numerica: a coluna guarda numeros, e strings ali
     // fariam o Sheets marcar toda linha valida como invalida.
     [ABAS.RECORRENTES, 'frequencia_meses',
@@ -522,6 +530,7 @@ function escreverInstrucoesReadme() {
     ['   Metas ............... suas caixinhas (metas comuns e a reserva).'],
     ['   Lancamentos ......... extrato completo: receitas, despesas, aportes, resgates.'],
     ['   Recorrentes ......... regras de lancamento automatico (aluguel, salario, aportes).'],
+    ['   Contas .............. saldo da conta corrente (e de outras contas).'],
     ['   Metas_Movimentos .... historico auditavel do saldo de cada meta.'],
     ['   Categorias .......... categorias de receita/despesa e orcamento padrao.'],
     ['   Orcamentos .......... limites mensais por categoria.'],
@@ -1027,7 +1036,31 @@ function validarDados() {
         '). O saldo das metas continua correto: ele vem de Metas_Movimentos.');
     }
 
-    // 7. Categorias usadas mas nao cadastradas.
+    // 7. Contas.
+    var contasCadastradas = {};
+    var padroes = 0;
+    lerTabela(ABAS.CONTAS).linhas.forEach(function (c) {
+      var idConta = String(c.id_conta || '').trim();
+      if (!idConta) return;
+      contasCadastradas[idConta] = true;
+      if (normalizarTexto(c.padrao) === 'sim' && normalizarTexto(c.ativa) !== 'nao') padroes++;
+    });
+    if (padroes > 1) {
+      avisos.push(padroes + ' contas marcadas como padrao. O sistema usa a primeira.');
+    }
+    var contasOrfas = {};
+    lancamentos.forEach(function (l) {
+      [l.conta_origem, l.conta_destino].forEach(function (c) {
+        var idConta = String(c || '').trim();
+        if (idConta && !contasCadastradas[idConta]) contasOrfas[idConta] = true;
+      });
+    });
+    Object.keys(contasOrfas).forEach(function (c) {
+      avisos.push('Lancamentos apontam para a conta "' + c + '", que nao existe na aba ' +
+                  ABAS.CONTAS + '. Eles nao entram em nenhum saldo.');
+    });
+
+    // 8. Categorias usadas mas nao cadastradas.
     var categoriasCadastradas = {};
     listarCategorias(false).forEach(function (c) {
       categoriasCadastradas[normalizarTexto(c.nome)] = true;

@@ -118,8 +118,8 @@ Os três primeiros itens desta lista saíram do roadmap e estão no sistema:
   sugerir a criação da regra. Só funciona bem com 3+ meses de dados.
 
 **Médio prazo**
-- Contas/carteiras de verdade: saldo por conta, usando a `TRANSFERENCIA` que já
-  existe e hoje é só neutra.
+- Recorrências e lançamentos via menu com escolha de conta em todos os fluxos
+  (hoje recorrências usam a conta padrão).
 - Rendimento automático das metas: gatilho mensal aplicando a taxa como
   `AJUSTE_POSITIVO`, mantendo tudo auditável.
 - Metas com aportes escalonados (aumentar o aporte a cada N meses).

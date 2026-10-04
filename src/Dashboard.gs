@@ -218,6 +218,18 @@ function atualizarDashboard(mesReferencia, indicadoresProntos) {
     // Despesa media (regra do sistema, nao formula).
     aba.getRange('B11').setValue(ind.despesaMediaConfigurada);
 
+    // Saldo em conta. Escrito aqui (e nao so no layout) para aparecer tambem
+    // em paineis montados antes desta funcionalidade, sem refazer o layout.
+    var contasInd = ind.contas || { configuradas: 0 };
+    aba.getRange('A12:B12').setValues([[
+      'Saldo em conta',
+      contasInd.configuradas ? contasInd.saldoAtual : 'informe o saldo'
+    ]]);
+    aba.getRange('A12').setFontWeight('bold');
+    aba.getRange('B12').setNumberFormat('R$ #,##0.00')
+      .setBackground(contasInd.configuradas && contasInd.saldoAtual < 0 ? '#f8cbad' : null);
+    atualizarSaldosNaAbaContas();
+
     // Destaque visual quando a reserva esta abaixo do recomendado.
     aba.getRange('E8').setBackground(
       ind.reserva.abaixoDoRecomendado ? '#f8cbad' : '#c6efce');

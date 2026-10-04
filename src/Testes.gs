@@ -39,6 +39,7 @@ function _novoContextoTeste(nome) {
     lancamentosCriados: [],
     movimentosCriados: [],
     recorrentesCriadas: [],
+    contasCriadas: [],
 
     /** Afirma que uma condicao e verdadeira. */
     afirmar: function (condicao, descricao) {
@@ -90,6 +91,7 @@ function _novoContextoTeste(nome) {
         _removerLancamentosEspelhoOrfaos();
         _removerLinhasPorIds(ABAS.METAS, 'id_meta', contexto.metasCriadas);
         _removerLinhasPorIds(ABAS.RECORRENTES, 'id_recorrente', contexto.recorrentesCriadas);
+        _removerLinhasPorIds(ABAS.CONTAS, 'id_conta', contexto.contasCriadas);
         limparCache();
       } catch (e) {
         logErro('_novoContextoTeste.limpar',
@@ -712,6 +714,128 @@ function testRecorrentes() {
   });
 }
 
+/** Testa o saldo das contas: cada tipo de lancamento, datas, edicao e reconciliacao. */
+function testContas() {
+  return _executarTeste('testContas', function (t) {
+    var sufixo = String(Math.floor(Math.random() * 100000));
+    var hoje = new Date();
+    function diasDeHoje(n) {
+      return new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + n, 12, 0, 0);
+    }
+    function saldo(id) { return _contaComSaldo(id); }
+    function lancar(dados) {
+      dados.origem = MARCADOR_TESTE;
+      dados.categoria = dados.categoria || 'Outros';
+      var l = registrarLancamento(dados, { permitirDuplicado: true });
+      t.lancamentosCriados.push(l.id_lancamento);
+      return l;
+    }
+
+    // --- criacao -------------------------------------------------------------
+    var a = criarConta({ nome: PREFIXO_NOME_TESTE + 'Conta A ' + sufixo, saldo_atual: '1.000,00' });
+    t.contasCriadas.push(a.id_conta);
+    t.afirmar(a.configurada, 'conta criada com saldo fica configurada');
+    t.afirmarProximo(a.saldoAtual, 1000, 'saldo informado na criacao');
+
+    var semSaldo = criarConta({ nome: PREFIXO_NOME_TESTE + 'Sem saldo ' + sufixo });
+    t.contasCriadas.push(semSaldo.id_conta);
+    t.afirmar(!semSaldo.configurada, 'conta sem saldo informado nao e configurada');
+    t.afirmar(semSaldo.saldoAtual === null, 'saldo de conta nao configurada e null, nao zero');
+
+    t.afirmarErro(function () { criarConta({ nome: a.nome }); }, 'nome de conta repetido');
+    t.afirmarErro(function () { criarConta({ nome: '' }); }, 'conta sem nome');
+
+    // --- efeito de cada tipo -------------------------------------------------
+    lancar({ data: diasDeHoje(0), tipo: 'RECEITA', valor: 500, conta: a.id_conta });
+    t.afirmarProximo(saldo(a.id_conta).saldoAtual, 1500, 'receita soma');
+
+    var despesa = lancar({ data: diasDeHoje(0), tipo: 'DESPESA', valor: 200, conta: a.nome });
+    t.afirmarProximo(saldo(a.id_conta).saldoAtual, 1300, 'despesa subtrai (conta pelo nome)');
+    t.afirmarIgual(despesa.conta_origem, a.id_conta, 'despesa grava o ID da conta, nao o nome');
+
+    var cancelada = lancar({ data: diasDeHoje(0), tipo: 'DESPESA', valor: 50, conta: a.id_conta,
+                             descricao: 'cancelada' });
+    cancelarLancamento(cancelada.id_lancamento);
+    t.afirmarProximo(saldo(a.id_conta).saldoAtual, 1300, 'lancamento cancelado nao mexe no saldo');
+
+    // A pergunta original: gasto antigo, ja pago, nao pode descontar de novo.
+    lancar({ data: diasDeHoje(-10), tipo: 'DESPESA', valor: 999, conta: a.id_conta,
+             descricao: 'antiga' });
+    t.afirmarProximo(saldo(a.id_conta).saldoAtual, 1300,
+                     'despesa anterior a data do saldo nao e descontada de novo');
+
+    lancar({ data: diasDeHoje(5), tipo: 'DESPESA', valor: 100, conta: a.id_conta,
+             descricao: 'agendada' });
+    var comFutura = saldo(a.id_conta);
+    t.afirmarProximo(comFutura.saldoAtual, 1300, 'lancamento futuro nao entra no saldo atual');
+    t.afirmarProximo(comFutura.saldoPrevisto, 1200, 'lancamento futuro entra no saldo previsto');
+    t.afirmar(comFutura.temLancamentoFuturo, 'conta sinaliza lancamento futuro');
+
+    // --- metas: aporte tira da conta, resgate devolve ------------------------
+    var meta = _criarMetaDeTeste(t, { valor_alvo: 5000 });
+    var aporte = aportarEmMeta(meta.id_meta, 300, diasDeHoje(0), 'aporte', MARCADOR_TESTE, a.id_conta);
+    t.movimentosCriados.push(aporte.id_movimento);
+    t.lancamentosCriados.push(aporte.id_lancamento);
+    t.afirmarProximo(saldo(a.id_conta).saldoAtual, 1000, 'aporte em meta tira da conta');
+    t.afirmarProximo(calcularSaldoMeta(meta.id_meta), 300, 'e entra na meta');
+
+    var resgate = resgatarDaMeta(meta.id_meta, 100, diasDeHoje(0), 'resgate', MARCADOR_TESTE, a.id_conta);
+    t.movimentosCriados.push(resgate.id_movimento);
+    t.lancamentosCriados.push(resgate.id_lancamento);
+    t.afirmarProximo(saldo(a.id_conta).saldoAtual, 1100, 'resgate devolve para a conta');
+
+    // --- transferencia entre contas -----------------------------------------
+    var b = criarConta({ nome: PREFIXO_NOME_TESTE + 'Conta B ' + sufixo, saldo_atual: 0 });
+    t.contasCriadas.push(b.id_conta);
+    lancar({ data: diasDeHoje(0), tipo: 'TRANSFERENCIA', valor: 400,
+             conta_origem: a.id_conta, conta_destino: b.nome });
+    t.afirmarProximo(saldo(a.id_conta).saldoAtual, 700, 'transferencia sai da origem');
+    t.afirmarProximo(saldo(b.id_conta).saldoAtual, 400, 'e entra no destino');
+    t.afirmarErro(function () {
+      lancar({ data: diasDeHoje(0), tipo: 'TRANSFERENCIA', valor: 1,
+               conta_origem: a.id_conta, conta_destino: a.id_conta });
+    }, 'transferencia para a mesma conta');
+    t.afirmarErro(function () {
+      lancar({ data: diasDeHoje(0), tipo: 'DESPESA', valor: 1, conta: 'CONTA-QUE-NAO-EXISTE' });
+    }, 'conta inexistente e recusada');
+
+    // --- edicao --------------------------------------------------------------
+    editarLancamento(despesa.id_lancamento, { valor: 250 });
+    t.afirmarProximo(saldo(a.id_conta).saldoAtual, 650, 'editar o valor ajusta o saldo');
+    editarLancamento(despesa.id_lancamento, { conta: b.id_conta });
+    t.afirmarProximo(saldo(a.id_conta).saldoAtual, 900, 'mudar a conta devolve a origem antiga');
+    t.afirmarProximo(saldo(b.id_conta).saldoAtual, 150, 'e desconta da nova');
+    editarLancamento(despesa.id_lancamento, { tipo: 'RECEITA' });
+    var virouReceita = obterLancamento(despesa.id_lancamento);
+    t.afirmarIgual(virouReceita.conta_destino, b.id_conta,
+                   'trocar despesa por receita move a conta para o destino');
+    t.afirmarProximo(saldo(b.id_conta).saldoAtual, 650, 'e o efeito inverte de sinal');
+
+    // --- reconciliacao -------------------------------------------------------
+    // Ha varios lancamentos de hoje na conta A. Informar o saldo real tem de
+    // fazer o saldo de hoje bater EXATAMENTE com o informado.
+    var reconciliada = definirSaldoAtual(a.id_conta, '5.000,00');
+    t.afirmarProximo(reconciliada.saldoAtual, 5000, 'saldo informado bate exatamente');
+    t.afirmarProximo(reconciliada.saldoPrevisto, 4900, 'previsto continua descontando o agendado');
+    lancar({ data: diasDeHoje(0), tipo: 'DESPESA', valor: 30, conta: a.id_conta, descricao: 'depois' });
+    t.afirmarProximo(saldo(a.id_conta).saldoAtual, 4970, 'lancamentos seguintes continuam contando');
+    t.afirmarProximo(definirSaldoAtual(a.id_conta, -150).saldoAtual, -150,
+                     'saldo negativo (cheque especial) e aceito');
+
+    // --- conta padrao --------------------------------------------------------
+    var padrao = obterContaPadrao();
+    var semConta = lancar({ data: diasDeHoje(0), tipo: 'DESPESA', valor: 1, descricao: 'sem conta' });
+    t.afirmarIgual(semConta.conta_origem, padrao.id_conta,
+                   'lancamento sem conta grava explicitamente o ID da conta padrao');
+
+    // --- efeitos (pura) ------------------------------------------------------
+    t.afirmarIgual(efeitosNasContas({ tipo: 'DESPESA', valor: 10, conta_origem: '' }, 'P')[0].conta,
+                   'P', 'lancamento antigo sem conta cai na padrao');
+    t.afirmarIgual(efeitosNasContas({ tipo: 'APORTE_META', valor: 10, conta_origem: 'X' }, 'P')[0].delta,
+                   -10, 'aporte tem efeito negativo');
+  });
+}
+
 /** Testa as tags: gravacao, normalizacao, filtro, agregacao e historico. */
 function testTags() {
   return _executarTeste('testTags', function (t) {
@@ -1200,6 +1324,7 @@ function executarTodosOsTestes() {
     testResgateMeta,
     testRecorrentes,
     testTags,
+    testContas,
     testIndicadores,
     testFallbackIA,
     testIntegridadeDados

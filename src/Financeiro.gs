@@ -32,8 +32,9 @@ var STATUS_LANCAMENTO = {
  *   {number} valor               obrigatorio, positivo
  *   {string=} categoria
  *   {string=} meta_id            obrigatorio para APORTE_META/RESGATE_META
- *   {string=} conta_origem
- *   {string=} conta_destino
+ *   {string=} conta               ID ou nome da conta afetada (padrao: conta padrao)
+ *   {string=} conta_origem        so para TRANSFERENCIA
+ *   {string=} conta_destino       so para TRANSFERENCIA
  *   {string=} descricao
  *   {string=} origem             padrao 'MANUAL'
  *   {string=} status             padrao 'CONFIRMADO'
@@ -126,6 +127,8 @@ function _inserirLancamento(payload, opcoes) {
   var status = String(dados.status || STATUS_LANCAMENTO.CONFIRMADO).trim().toUpperCase();
   if (!STATUS_LANCAMENTO[status]) status = STATUS_LANCAMENTO.CONFIRMADO;
 
+  var contas = _resolverContasDoLancamento(tipo, dados);
+
   var agora = new Date();
   var id = gerarId(PREFIXOS_ID.LANCAMENTO);
 
@@ -136,8 +139,8 @@ function _inserirLancamento(payload, opcoes) {
     valor: valor,
     categoria: categoria,
     meta_id: metaId,
-    conta_origem: String(dados.conta_origem || ''),
-    conta_destino: String(dados.conta_destino || ''),
+    conta_origem: contas.conta_origem,
+    conta_destino: contas.conta_destino,
     descricao: String(dados.descricao || ''),
     origem: String(dados.origem || 'MANUAL'),
     tags: normalizarTags(dados.tags),
@@ -150,6 +153,53 @@ function _inserirLancamento(payload, opcoes) {
   logInfo('registrarLancamento', tipo + ' de ' + formatarMoeda(valor) + ' em ' + categoria,
           { id_lancamento: id, data: formatarData(data) });
   return registro;
+}
+
+/**
+ * Decide quais contas um lancamento afeta e devolve os IDs para gravar.
+ *
+ *   RECEITA, RESGATE_META -> conta_destino
+ *   DESPESA, APORTE_META  -> conta_origem
+ *   TRANSFERENCIA         -> conta_origem e conta_destino, ambas obrigatorias
+ *
+ * Aceita ID ou nome. Sem conta informada, usa a conta padrao - e grava o ID
+ * dela explicitamente, para que trocar a conta padrao depois nao "mude de
+ * conta" os lancamentos antigos.
+ *
+ * @param {string} tipo
+ * @param {Object} dados {conta, conta_origem, conta_destino}
+ * @return {{conta_origem: string, conta_destino: string}}
+ * @private
+ */
+function _resolverContasDoLancamento(tipo, dados) {
+  function idDe(referencia, rotulo) {
+    var conta = resolverConta(referencia);
+    if (!conta) {
+      throw new Error((rotulo || 'Conta') + ' nao encontrada: "' + referencia + '". ' +
+        'Cadastre-a em Financeiro > Contas > Nova conta.');
+    }
+    return String(conta.id_conta).trim();
+  }
+
+  if (tipo === TIPOS_LANCAMENTO.TRANSFERENCIA) {
+    var origem = String(dados.conta_origem || '').trim();
+    var destino = String(dados.conta_destino || '').trim();
+    if (!origem || !destino) {
+      throw new Error('Transferencia exige conta de origem e conta de destino.');
+    }
+    var idOrigem = idDe(origem, 'Conta de origem');
+    var idDestino = idDe(destino, 'Conta de destino');
+    if (idOrigem === idDestino) throw new Error('Origem e destino sao a mesma conta.');
+    return { conta_origem: idOrigem, conta_destino: idDestino };
+  }
+
+  var informada = String(dados.conta || '').trim() ||
+    String((tipo === TIPOS_LANCAMENTO.RECEITA || tipo === TIPOS_LANCAMENTO.RESGATE_META)
+      ? dados.conta_destino || '' : dados.conta_origem || '').trim();
+  var id = informada ? idDe(informada) : String(obterContaPadrao().id_conta).trim();
+
+  var entra = tipo === TIPOS_LANCAMENTO.RECEITA || tipo === TIPOS_LANCAMENTO.RESGATE_META;
+  return { conta_origem: entra ? '' : id, conta_destino: entra ? id : '' };
 }
 
 /**
@@ -221,6 +271,7 @@ function registrarTransferencia(data, valor, contaOrigem, contaDestino, descrica
   if (!String(contaOrigem || '').trim() || !String(contaDestino || '').trim()) {
     throw new Error('Informe conta de origem e conta de destino da transferencia.');
   }
+  // _inserirLancamento resolve os nomes/IDs das contas e recusa conta inexistente.
   return registrarLancamento({
     data: data, tipo: TIPOS_LANCAMENTO.TRANSFERENCIA, valor: valor,
     categoria: String(obterConfig('categoria_transferencia_padrao', 'Outros')),
@@ -358,8 +409,22 @@ function editarLancamento(idLancamento, payload) {
     }
 
     if (dados.descricao !== undefined) campos.descricao = String(dados.descricao);
-    if (dados.conta_origem !== undefined) campos.conta_origem = String(dados.conta_origem);
-    if (dados.conta_destino !== undefined) campos.conta_destino = String(dados.conta_destino);
+    // Conta: recalculada se mudou a conta OU o tipo (receita entra no destino,
+    // despesa sai da origem - trocar o tipo troca a coluna que importa).
+    var mudouConta = dados.conta !== undefined && String(dados.conta).trim() !== '';
+    var mudouContaTransf = dados.conta_origem !== undefined || dados.conta_destino !== undefined;
+    if (mudouConta || mudouContaTransf || campos.tipo) {
+      var tipoFinal = campos.tipo || tipoAtual;
+      var contaAtual = tipoAtual === TIPOS_LANCAMENTO.RECEITA
+        ? lancamento.conta_destino : lancamento.conta_origem;
+      var novas = _resolverContasDoLancamento(tipoFinal, {
+        conta: mudouConta ? dados.conta : (tipoFinal === TIPOS_LANCAMENTO.TRANSFERENCIA ? '' : contaAtual),
+        conta_origem: dados.conta_origem !== undefined ? dados.conta_origem : lancamento.conta_origem,
+        conta_destino: dados.conta_destino !== undefined ? dados.conta_destino : lancamento.conta_destino
+      });
+      campos.conta_origem = novas.conta_origem;
+      campos.conta_destino = novas.conta_destino;
+    }
     // Tags vazias sao um valor valido: e assim que se remove todas.
     if (dados.tags !== undefined) campos.tags = normalizarTags(dados.tags);
 

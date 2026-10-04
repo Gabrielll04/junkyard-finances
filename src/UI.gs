@@ -36,6 +36,13 @@ function criarMenu() {
     .addItem('Ativar/desativar', 'menuAlternarRecorrencia')
     .addItem('Excluir recorrencia', 'menuExcluirRecorrencia');
 
+  var menuContas = ui.createMenu('Contas')
+    .addItem('Ver saldos', 'menuVerContas')
+    .addItem('Informar saldo atual', 'menuInformarSaldo')
+    .addSeparator()
+    .addItem('Nova conta', 'menuNovaConta')
+    .addItem('Definir conta padrao', 'menuDefinirContaPadrao');
+
   var menuLancamentos = ui.createMenu('Lancamentos')
     .addItem('Registrar receita', 'menuRegistrarReceita')
     .addItem('Registrar despesa', 'menuRegistrarDespesa')
@@ -99,6 +106,7 @@ function criarMenu() {
     .addItem('Registrar receita', 'menuRegistrarReceita')
     .addItem('Registrar despesa', 'menuRegistrarDespesa')
     .addSeparator()
+    .addSubMenu(menuContas)
     .addSubMenu(menuLancamentos)
     .addSubMenu(menuMetas)
     .addSubMenu(menuSimulacoes)
@@ -266,9 +274,13 @@ function _registrarLancamentoViaDialogo(tipo, titulo) {
     var tags = _perguntar(_textoPerguntaTags(), titulo);
     if (tags === null) return '';
 
+    var conta = _escolherContaSeHouverVarias(
+      tipo === TIPOS_LANCAMENTO.RECEITA ? 'Em qual conta entrou?' : 'De qual conta saiu?', titulo);
+    if (conta === null) return '';
+
     var lancamento = registrarLancamento({
       data: data, tipo: tipo, valor: valorTexto,
-      categoria: categoria, descricao: descricao, tags: tags
+      categoria: categoria, descricao: descricao, tags: tags, conta: conta
     });
 
     atualizarDashboard();
@@ -641,6 +653,127 @@ function menuConsultarTag() {
       '\n\nTotal: ' + formatarMoeda(r.total) +
       '\nMedia nos meses com gasto: ' + formatarMoeda(r.mediaMensal) +
       ' (' + r.mesesComGasto + ' de 6 meses)';
+  });
+}
+
+// ===========================================================================
+// ACOES DO MENU - CONTAS
+// ===========================================================================
+
+/**
+ * Pergunta a conta so quando ha mais de uma. Com uma so, nao incomoda.
+ * @return {string|null} ID da conta, '' para a padrao, null se cancelou.
+ * @private
+ */
+function _escolherContaSeHouverVarias(pergunta, titulo) {
+  var contas = listarContas(false);
+  if (contas.length <= 1) return '';
+  var texto = contas.map(function (c, i) {
+    return (i + 1) + ') ' + c.nome + (c.ehPadrao ? ' (padrao)' : '');
+  }).join('\n');
+  var resposta = _perguntar(pergunta + '\n\n' + texto + '\n\nNumero (vazio = conta padrao):', titulo);
+  if (resposta === null) return null;
+  if (!resposta) return '';
+  var indice = parseInt(resposta, 10) - 1;
+  if (isNaN(indice) || indice < 0 || indice >= contas.length) {
+    throw new Error('Numero de conta invalido.');
+  }
+  return contas[indice].id_conta;
+}
+
+/**
+ * Escolhe uma conta pelo numero (sempre pergunta).
+ * @private
+ */
+function _escolherConta(titulo) {
+  var contas = listarContas(false);
+  if (contas.length === 1) return contas[0];
+  var texto = contas.map(function (c, i) {
+    return (i + 1) + ') ' + c.nome + ' - ' +
+      (c.configurada ? formatarMoeda(c.saldoAtual) : 'saldo nao informado');
+  }).join('\n');
+  var resposta = _perguntar(texto + '\n\nNumero da conta:', titulo);
+  if (resposta === null) return null;
+  var indice = parseInt(resposta, 10) - 1;
+  if (isNaN(indice) || indice < 0 || indice >= contas.length) {
+    _alerta('Numero invalido.');
+    return null;
+  }
+  return contas[indice];
+}
+
+/** Mostra o saldo de cada conta. */
+function menuVerContas() {
+  _executarAcaoDeMenu('menuVerContas', function () {
+    var resumo = resumoDasContas();
+    var linhas = resumo.contas.map(function (c) {
+      if (!c.configurada) {
+        return '- ' + c.nome + (c.ehPadrao ? ' (padrao)' : '') +
+          ': saldo ainda nao informado. Use "Informar saldo atual".';
+      }
+      var texto = '- ' + c.nome + (c.ehPadrao ? ' (padrao)' : '') + ': ' +
+        formatarMoeda(c.saldoAtual);
+      if (c.temLancamentoFuturo) {
+        texto += '\n    previsto com lancamentos agendados: ' + formatarMoeda(c.saldoPrevisto);
+      }
+      texto += '\n    lancamentos contados a partir de ' + formatarData(c.data_referencia);
+      return texto;
+    });
+    return 'SALDOS\n\n' + linhas.join('\n\n') +
+      (resumo.contas.length > 1 && resumo.configuradas
+        ? '\n\nTotal: ' + formatarMoeda(resumo.atual) : '');
+  });
+}
+
+/** Informa o saldo real de uma conta (reconciliacao). */
+function menuInformarSaldo() {
+  _executarAcaoDeMenu('menuInformarSaldo', function () {
+    var conta = _escolherConta('Informar saldo atual');
+    if (!conta) return '';
+
+    var valor = _perguntar(
+      'Conta: ' + conta.nome + '\n' +
+      (conta.configurada ? 'Saldo no sistema: ' + formatarMoeda(conta.saldoAtual) + '\n' : '') +
+      '\nQual o saldo REAL agora (o que aparece no banco)?\n' +
+      'Pode ser negativo, ex.: -150,00\n\n' +
+      'Lancamentos de hoje ja lancados sao considerados incluidos nesse valor. ' +
+      'Lancamentos anteriores a hoje nao serao descontados de novo.',
+      'Informar saldo atual');
+    if (valor === null || valor === '') return '';
+
+    var atualizada = definirSaldoAtual(conta.id_conta, valor);
+    atualizarDashboard();
+    return 'Saldo de "' + atualizada.nome + '" definido: ' +
+      formatarMoeda(atualizada.saldoAtual) + '.\n\n' +
+      'A partir de agora, receitas somam, despesas subtraem, aportes em meta ' +
+      'tiram da conta e resgates devolvem.';
+  });
+}
+
+/** Cria uma conta nova. */
+function menuNovaConta() {
+  _executarAcaoDeMenu('menuNovaConta', function () {
+    var nome = _perguntar('Nome da conta (ex.: Nubank, Carteira, Itau):', 'Nova conta');
+    if (nome === null || !nome) return '';
+    var saldo = _perguntar('Saldo atual dessa conta (vazio = informar depois):', 'Nova conta');
+    if (saldo === null) return '';
+    var padrao = _confirmar('Usar "' + nome + '" como conta PADRAO?\n\n' +
+      'Lancamentos sem conta escolhida caem na conta padrao.');
+    var conta = criarConta({ nome: nome, saldo_atual: saldo, padrao: padrao });
+    atualizarDashboard();
+    return 'Conta "' + conta.nome + '" criada' +
+      (conta.configurada ? ' com saldo de ' + formatarMoeda(conta.saldoAtual) : '') + '.';
+  });
+}
+
+/** Troca a conta padrao. */
+function menuDefinirContaPadrao() {
+  _executarAcaoDeMenu('menuDefinirContaPadrao', function () {
+    var conta = _escolherConta('Definir conta padrao');
+    if (!conta) return '';
+    editarConta(conta.id_conta, { padrao: true });
+    return '"' + conta.nome + '" agora e a conta padrao. Lancamentos antigos continuam ' +
+      'nas contas em que foram registrados.';
   });
 }
 
@@ -1340,6 +1473,17 @@ function _montarEstadoSidebar(ind) {
       insights: insights,
       categoriasReceita: listarNomesCategorias(TIPOS_LANCAMENTO.RECEITA),
       categoriasDespesa: listarNomesCategorias(TIPOS_LANCAMENTO.DESPESA),
+      contas: (ind.contas ? ind.contas.lista : []).map(function (c) {
+        return {
+          id: c.id, nome: c.nome, padrao: c.padrao, configurada: c.configurada,
+          saldoAtual: c.configurada ? formatarMoeda(c.saldoAtual) : '',
+          saldoNegativo: c.configurada && c.saldoAtual < 0,
+          saldoPrevisto: c.temLancamentoFuturo ? formatarMoeda(c.saldoPrevisto) : '',
+          dataReferencia: c.dataReferencia
+        };
+      }),
+      saldoTotalContas: ind.contas && ind.contas.configuradas
+        ? formatarMoeda(ind.contas.saldoAtual) : '',
       recorrentes: _recorrentesParaInterface(),
       tagsDoMes: (ind.topTags || []).map(function (t) {
         return { tag: t.tag, total: formatarMoeda(t.total), quantidade: t.quantidade };
@@ -1413,8 +1557,8 @@ function uiMovimentarMeta(payload) {
     var dados = payload || {};
     var operacao = String(dados.operacao || 'APORTE').toUpperCase();
     var resultado = (operacao === 'RESGATE')
-      ? resgatarDaMeta(dados.metaId, dados.valor, dados.data, dados.descricao)
-      : aportarEmMeta(dados.metaId, dados.valor, dados.data, dados.descricao);
+      ? resgatarDaMeta(dados.metaId, dados.valor, dados.data, dados.descricao, null, dados.conta)
+      : aportarEmMeta(dados.metaId, dados.valor, dados.data, dados.descricao, null, dados.conta);
 
     var estado = _concluirAlteracaoSidebar();
     return {
@@ -1536,6 +1680,9 @@ function _lancamentosParaInterface(filtros) {
       descricao: String(l.descricao || ''),
       status: String(l.status || ''),
       tags: listarTags(l.tags),
+      contaId: String(((String(l.tipo).toUpperCase() === TIPOS_LANCAMENTO.RECEITA ||
+                        String(l.tipo).toUpperCase() === TIPOS_LANCAMENTO.RESGATE_META)
+        ? l.conta_destino : l.conta_origem) || ''),
       cancelado: String(l.status || '').toUpperCase() === STATUS_LANCAMENTO.CANCELADO,
       // Espelhos de meta e ocorrencias recorrentes sao somente leitura aqui.
       editavel: origem.indexOf('META:') !== 0,
@@ -1621,7 +1768,8 @@ function uiEditarLancamento(payload) {
       valor: dados.valor,
       categoria: dados.categoria,
       descricao: dados.descricao,
-      tags: dados.tags
+      tags: dados.tags,
+      conta: dados.conta
     });
 
     var estado = _concluirAlteracaoSidebar();
@@ -1770,5 +1918,31 @@ function uiConsultarTag(payload) {
         };
       })
     };
+  });
+}
+
+/**
+ * Informa o saldo real de uma conta a partir da sidebar.
+ * @param {Object} payload {id, saldo}
+ * @return {Object}
+ */
+function uiDefinirSaldoConta(payload) {
+  return _respostaSidebar('uiDefinirSaldoConta', function () {
+    var dados = payload || {};
+    var conta = definirSaldoAtual(dados.id, dados.saldo);
+    return { nome: conta.nome, saldo: formatarMoeda(conta.saldoAtual),
+             estado: _concluirAlteracaoSidebar() };
+  });
+}
+
+/**
+ * Cria uma conta a partir da sidebar.
+ * @param {Object} payload {nome, saldo_atual, padrao}
+ * @return {Object}
+ */
+function uiCriarConta(payload) {
+  return _respostaSidebar('uiCriarConta', function () {
+    var conta = criarConta(payload || {});
+    return { nome: conta.nome, estado: _concluirAlteracaoSidebar() };
   });
 }

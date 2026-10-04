@@ -79,10 +79,12 @@ var CATEGORIAS_PADRAO = [
 var SENTINELAS = [
   { arquivo: 'Repositorio.gs', testar: function () {
       return [obterAbaSegura, lerTabela, adicionarLinha, formatarMoeda,
-              dataPlausivel, comLock]; } },
+              dataPlausivel, comLock,
+              // versao com tags e memoria por execucao
+              normalizarTags, removerLinhas, formatarMesExtenso]; } },
   { arquivo: 'Financeiro.gs', testar: function () {
       return [registrarLancamento, editarLancamento, excluirLancamento,
-              listarCategorias]; } },
+              listarCategorias, agruparPorTag, consultarTag]; } },
   { arquivo: 'Recorrentes.gs', testar: function () {
       return [criarRecorrente, gerarLancamentosRecorrentes,
               calcularComprometimentoMensal]; } },
@@ -100,7 +102,7 @@ var SENTINELAS = [
   { arquivo: 'IA.gs', testar: function () {
       return [gerarInsightsIA, parseRespostaIA, obterStatusIA]; } },
   { arquivo: 'UI.gs', testar: function () {
-      return [onOpen, criarMenu, abrirSidebar, uiObterEstado]; } },
+      return [onOpen, criarMenu, abrirSidebar, uiObterEstado, uiConsultarTag]; } },
   { arquivo: 'ImportacaoFutura.gs', testar: function () {
       return [prepararImportacaoDocumentos, criarLancamentoAPartirImportacao]; } },
   { arquivo: 'Testes.gs', testar: function () {

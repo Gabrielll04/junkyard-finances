@@ -339,7 +339,7 @@ function _atualizarDadosGraficos(aba, ind) {
     for (var i = 0; i < 12; i++) {
       var mes = serie[i];
       linhasSerie.push(mes
-        ? [_rotuloMesCurto(mes.mes), mes.receitas, mes.despesas]
+        ? [rotuloMesCurto(mes.mes), mes.receitas, mes.despesas]
         : ['', '', '']);
     }
     aba.getRange(1, DASHBOARD_COLUNA_SERIE, linhasSerie.length, 3)
@@ -425,21 +425,6 @@ function _garantirGraficos(aba) {
     // Grafico e enfeite util, nunca motivo para derrubar a atualizacao do painel.
     logErro('_garantirGraficos', 'Falha ao criar graficos', e.message);
   }
-}
-
-/**
- * Rotulo curto de mes para o eixo do grafico: "2026-03" vira "mar/26".
- * @param {string} chave yyyy-MM
- * @return {string}
- * @private
- */
-function _rotuloMesCurto(chave) {
-  var nomes = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun',
-               'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-  var partes = String(chave).split('-');
-  var indice = parseInt(partes[1], 10) - 1;
-  if (isNaN(indice) || indice < 0 || indice > 11) return String(chave);
-  return nomes[indice] + '/' + String(partes[0]).slice(2);
 }
 
 /**

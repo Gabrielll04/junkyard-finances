@@ -44,6 +44,9 @@ function criarMenu() {
     .addItem('Editar lancamento', 'menuEditarLancamento')
     .addItem('Excluir lancamento', 'menuExcluirLancamento')
     .addSeparator()
+    .addItem('Gastos por tag (mes)', 'menuGastosPorTag')
+    .addItem('Consultar uma tag', 'menuConsultarTag')
+    .addSeparator()
     .addSubMenu(menuRecorrentes);
 
   var menuMetas = ui.createMenu('Metas')
@@ -260,15 +263,19 @@ function _registrarLancamentoViaDialogo(tipo, titulo) {
     var descricao = _perguntar('Descricao (opcional):', titulo);
     if (descricao === null) return '';
 
+    var tags = _perguntar(_textoPerguntaTags(), titulo);
+    if (tags === null) return '';
+
     var lancamento = registrarLancamento({
       data: data, tipo: tipo, valor: valorTexto,
-      categoria: categoria, descricao: descricao
+      categoria: categoria, descricao: descricao, tags: tags
     });
 
     atualizarDashboard();
     return (tipo === TIPOS_LANCAMENTO.RECEITA ? 'Receita' : 'Despesa') +
       ' de ' + formatarMoeda(lancamento.valor) + ' registrada em ' +
-      formatarData(lancamento.data) + ' (' + lancamento.categoria + ').';
+      formatarData(lancamento.data) + ' (' + lancamento.categoria + ')' +
+      (lancamento.tags ? ' com as tags: ' + lancamento.tags : '') + '.';
   });
 }
 
@@ -349,6 +356,13 @@ function menuEditarLancamento() {
     if (descricao === null) return '';
     if (descricao === '-') campos.descricao = '';
     else if (descricao) campos.descricao = descricao;
+
+    var tags = _perguntar('Tags (vazio mantem' +
+      (lancamento.tags ? ' "' + lancamento.tags + '"' : ' sem tags') +
+      '; "-" remove todas). Separe por virgula:', 'Editar lancamento');
+    if (tags === null) return '';
+    if (tags === '-') campos.tags = '';
+    else if (tags) campos.tags = tags;
 
     if (!Object.keys(campos).length) return 'Nada foi alterado.';
 
@@ -468,6 +482,9 @@ function menuNovaRecorrencia() {
     var fim = _perguntar('Data final dd/mm/aaaa (opcional, vazio = sem fim):', titulo);
     if (fim === null) return '';
 
+    var tagsRecorrencia = _perguntar(_textoPerguntaTags(), titulo);
+    if (tagsRecorrencia === null) return '';
+
     var regra = criarRecorrente({
       descricao: descricao,
       tipo: tipoNormalizado,
@@ -477,7 +494,8 @@ function menuNovaRecorrencia() {
       dia_do_mes: dia,
       frequencia_meses: frequencia,
       data_inicio: inicio,
-      data_fim: fim
+      data_fim: fim,
+      tags: tagsRecorrencia
     });
 
     var gerar = _confirmar('Recorrencia criada.\n\n' + regra.resumo +
@@ -570,6 +588,59 @@ function menuExcluirRecorrencia() {
 
     var resultado = excluirRecorrente(regra.id_recorrente, definitiva ? 'HARD' : 'SOFT');
     return resultado.mensagem;
+  });
+}
+
+/**
+ * Texto da pergunta de tags, com as mais usadas como sugestao.
+ * @return {string}
+ * @private
+ */
+function _textoPerguntaTags() {
+  var usadas = listarTagsUsadas(12);
+  return 'Tags (opcional). Separe por virgula, ex.: luz, apartamento' +
+    (usadas.length ? '\n\nJa usadas: ' + usadas.join(', ') : '');
+}
+
+/** Mostra quanto foi gasto em cada tag no mes. */
+function menuGastosPorTag() {
+  _executarAcaoDeMenu('menuGastosPorTag', function () {
+    var mes = mesAtual();
+    var grupos = agruparPorTag(mes);
+    if (!grupos.length) {
+      return 'Nenhuma despesa com tag em ' + formatarMesExtenso(mes) + '.\n\n' +
+        'Para comecar, informe tags ao lancar (ex.: luz, agua) ou edite ' +
+        'lancamentos antigos em Lancamentos > Editar lancamento.';
+    }
+    return 'DESPESAS POR TAG - ' + formatarMesExtenso(mes).toUpperCase() + '\n\n' +
+      grupos.map(function (g) {
+        return '- ' + g.tag + ': ' + formatarMoeda(g.total) +
+          ' (' + g.quantidade + ' lancamento' + (g.quantidade > 1 ? 's' : '') + ')';
+      }).join('\n') +
+      '\n\nUm lancamento com duas tags conta inteiro em cada uma, entao a soma ' +
+      'das tags pode passar do total de despesas.';
+  });
+}
+
+/** Historico de uma tag nos ultimos meses. */
+function menuConsultarTag() {
+  _executarAcaoDeMenu('menuConsultarTag', function () {
+    var usadas = listarTagsUsadas(20);
+    if (!usadas.length) return 'Nenhuma tag usada ainda.';
+
+    var tag = _perguntar('Qual tag?\n\nDisponiveis: ' + usadas.join(', '), 'Consultar tag');
+    if (tag === null || !tag) return '';
+
+    var r = consultarTag(tag, { meses: 6 });
+    if (!r.total) return 'Nenhuma despesa com a tag "' + tag + '" nos ultimos 6 meses.';
+
+    return 'TAG "' + r.tag + '" - ULTIMOS 6 MESES\n\n' +
+      r.meses.map(function (m) {
+        return formatarMesExtenso(m.mes) + ': ' + formatarMoeda(m.total);
+      }).join('\n') +
+      '\n\nTotal: ' + formatarMoeda(r.total) +
+      '\nMedia nos meses com gasto: ' + formatarMoeda(r.mediaMensal) +
+      ' (' + r.mesesComGasto + ' de 6 meses)';
   });
 }
 
@@ -1270,6 +1341,10 @@ function _montarEstadoSidebar(ind) {
       categoriasReceita: listarNomesCategorias(TIPOS_LANCAMENTO.RECEITA),
       categoriasDespesa: listarNomesCategorias(TIPOS_LANCAMENTO.DESPESA),
       recorrentes: _recorrentesParaInterface(),
+      tagsDoMes: (ind.topTags || []).map(function (t) {
+        return { tag: t.tag, total: formatarMoeda(t.total), quantidade: t.quantidade };
+      }),
+      tagsConhecidas: listarTagsUsadas(30),
       comprometimento: _comprometimentoParaInterface(),
       ultimosLancamentos: _lancamentosParaInterface({ limite: 25 }),
       statusIa: obterStatusIA(),
@@ -1460,6 +1535,7 @@ function _lancamentosParaInterface(filtros) {
       categoria: String(l.categoria || ''),
       descricao: String(l.descricao || ''),
       status: String(l.status || ''),
+      tags: listarTags(l.tags),
       cancelado: String(l.status || '').toUpperCase() === STATUS_LANCAMENTO.CANCELADO,
       // Espelhos de meta e ocorrencias recorrentes sao somente leitura aqui.
       editavel: origem.indexOf('META:') !== 0,
@@ -1487,6 +1563,7 @@ function _recorrentesParaInterface() {
       frequenciaMeses: parseInt(paraNumero(r.frequencia_meses), 10) || 1,
       proxima: formatarData(r.proxima_geracao),
       totalGerado: paraNumero(r.total_gerado) || 0,
+      tags: listarTags(r.tags),
       ativa: r.ativa
     };
   });
@@ -1521,6 +1598,7 @@ function uiListarLancamentos(filtros) {
       mes: f.mes || null,
       tipo: f.tipo || null,
       categoria: f.categoria || null,
+      tag: f.tag || null,
       incluirCancelados: f.incluirCancelados !== false,
       limite: parseInt(f.limite, 10) || 25
     });
@@ -1542,7 +1620,8 @@ function uiEditarLancamento(payload) {
       tipo: dados.tipo,
       valor: dados.valor,
       categoria: dados.categoria,
-      descricao: dados.descricao
+      descricao: dados.descricao,
+      tags: dados.tags
     });
 
     var estado = _concluirAlteracaoSidebar();
@@ -1664,5 +1743,32 @@ function uiGerarRecorrentes(payload) {
       ? _concluirAlteracaoSidebar()
       : _montarEstadoSidebar(gerarIndicadores());
     return resultado;
+  });
+}
+
+/**
+ * Historico de uma tag para a sidebar.
+ * @param {Object} payload {tag, meses}
+ * @return {Object}
+ */
+function uiConsultarTag(payload) {
+  return _respostaSidebar('uiConsultarTag', function () {
+    var dados = payload || {};
+    var r = consultarTag(dados.tag, { meses: parseInt(dados.meses, 10) || 6 });
+    var maior = r.meses.reduce(function (m, x) { return Math.max(m, x.total); }, 0);
+    return {
+      tag: r.tag,
+      total: formatarMoeda(r.total),
+      media: formatarMoeda(r.mediaMensal),
+      mesesComGasto: r.mesesComGasto,
+      meses: r.meses.map(function (m) {
+        return {
+          rotulo: rotuloMesCurto(m.mes),
+          total: formatarMoeda(m.total),
+          // largura relativa da barra, para o mini-grafico da sidebar
+          proporcao: maior > 0 ? Math.round((m.total / maior) * 100) : 0
+        };
+      })
+    };
   });
 }

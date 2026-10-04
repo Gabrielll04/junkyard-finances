@@ -150,7 +150,7 @@ function gerarIndicadores(mesReferencia) {
   // --- medias --------------------------------------------------------------
   var indicadores = {
     mes: mes,
-    mesFormatado: _formatarMesExtenso(mes),
+    mesFormatado: formatarMesExtenso(mes),
     receitas: receitas,
     despesas: despesas,
     saldo: saldo,
@@ -181,6 +181,7 @@ function gerarIndicadores(mesReferencia) {
       abaixoDoRecomendado: coberturaReserva < mesesReservaConfig
     },
     topCategorias: agruparDespesasPorCategoria(mes).slice(0, 5),
+    topTags: agruparPorTag(mes).slice(0, 8),
     serieMensal: serie12,
     metas: metas.map(function (m) {
       return {
@@ -295,21 +296,6 @@ function _separarFixosEVariaveis(mes) {
     variaveis: arredondar2(variaveis),
     percentualFixos: total > 0 ? arredondar2((fixos / total) * 100) : 0
   };
-}
-
-/**
- * Nome do mes por extenso a partir da chave yyyy-MM.
- * @param {string} chave
- * @return {string}
- * @private
- */
-function _formatarMesExtenso(chave) {
-  var nomes = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho',
-               'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
-  var partes = String(chave).split('-');
-  var indice = parseInt(partes[1], 10) - 1;
-  if (isNaN(indice) || indice < 0 || indice > 11) return String(chave);
-  return nomes[indice] + '/' + partes[0];
 }
 
 // ===========================================================================

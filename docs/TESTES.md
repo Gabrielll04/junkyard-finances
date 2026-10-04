@@ -2,6 +2,36 @@
 
 ## 4.1 Como rodar
 
+### Fora do Google, no seu computador
+
+`ferramentas/` tem um simulador do Apps Script em Node. Ele roda o código real
+de `src/` contra uma planilha em memória e conta cada ida ao Google.
+
+```bash
+cd ferramentas
+npm install
+npm test          # auditoria + 15 testes de servidor + 21 de sidebar
+npm run medir     # custo de um lancamento rapido, em idas ao Google
+```
+
+- **`auditar.js`** — sintaxe de todos os arquivos, funções privadas usadas fora
+  do arquivo de origem (a causa do erro `is not defined` de antes) e sentinelas
+  de `verificarInstalacao()` apontando para funções que existem.
+- **`testar-servidor.js`** — `setupFinanceiro` com dados de exemplo e
+  `executarTodosOsTestes()`, com validação de integridade antes e depois.
+- **`testar-sidebar.js`** — a `Sidebar.html` num navegador simulado (jsdom),
+  falando com o servidor simulado. Imita as regras do `google.script.run`: cada
+  chamada é uma execução nova, e uma resposta com `Date` chega como `null`.
+- **`medir-lancamento.js`** — conta leituras, consultas ao cache e escritas de
+  um lançamento. A conversão para segundos usa custos aproximados; o que vale
+  é a contagem.
+
+O simulador cobre a lógica, não a interface do Google: formatação, gráficos e
+caixas de diálogo são aceitos sem efeito. O teste final continua sendo a sua
+planilha.
+
+### Dentro do Google
+
 - **Pelo menu:** `Financeiro → Dados → Executar testes`.
 - **Pelo editor:** execute `executarTodosOsTestes()` e veja o retorno nos logs.
 - **Só os testes puros (rápidos, não tocam na planilha):** `executarTestesRapidos()`.
@@ -19,7 +49,7 @@ Os testes rodam na sua planilha real, mas:
 Ainda assim, rode os testes antes de acumular meses de dados reais, ou faça um
 backup por `Dados → Backup / exportar`.
 
-## 4.2 As 14 funções de teste
+## 4.2 As 15 funções de teste
 
 | Função | O que valida |
 |---|---|
@@ -32,6 +62,7 @@ backup por `Dados → Backup / exportar`.
 | `testRegistrarReceita` | Soma do mês, normalização de categoria (`salario` → `Salario`), atalho `registrarReceita`. |
 | `testEditarExcluirLancamento` | Edição de valor/categoria/descrição com ID preservado e total do mês recalculado; rejeição de data inválida, valor negativo, conversão para `APORTE_META` e ID inexistente; cancelar → reativar; espelho de meta recusa edição **e** exclusão, com saldo intacto; `HARD` sem confirmação é recusado, com confirmação apaga a linha. |
 | `testRecorrentes` | Criação; geração de exatamente 4 ocorrências vencidas; **idempotência** (segunda execução cria 0 e pula 4); total do mês não dobra; chaves de origem únicas; contador e próxima ocorrência; desativar/reativar; validações (descrição, tipo, valor, frequência, aporte sem meta, data final < início); dia 31 em fevereiro/abril; data final corta a geração; frequência trimestral; aporte recorrente grava em `Metas_Movimentos` e entra no saldo; comprometimento mensal normalizado; exclusão da regra preserva os lançamentos gerados. |
+| `testTags` | Normalização (vírgula e ponto e vírgula, `#`, repetidas, caixa e acento); gravação; a pergunta original — água e luz separadas dentro de *Contas fixas*; tag compartilhada somando os dois lançamentos; filtro do extrato; histórico de 6 meses e média só nos meses com gasto; edição e remoção de tags sem afetar outros campos; sugestões; recorrência passando as tags para o lançamento gerado. |
 | `testAporteMeta` | Saldo e progresso após aporte, espelho `APORTE_META` criado, **aporte não vira receita nem despesa**, acúmulo de aportes, rejeições, meta vira `CONCLUIDA` ao atingir o alvo. |
 | `testResgateMeta` | Saldo após resgate, espelho `RESGATE_META`, bloqueio por saldo insuficiente, saldo intacto após rejeição. |
 | `testIndicadores` | Mês de referência, receitas/despesas incluem o lançado, `saldo = receitas - despesas`, fórmula da taxa de poupança, top-5 categorias, série de 12 meses, blocos de reserva e fixos/variáveis, soma das categorias ≤ despesas, orçamentos. |
@@ -137,12 +168,14 @@ Tudo marcado com origem `EXEMPLO` e removível por
 5. Tente resgatar mais do que o saldo: deve ser recusado com mensagem clara.
 6. Simule a meta com um aporte maior: o comparativo deve dizer quantos meses você ganha.
 7. `Dados → Validar dados`: nenhum problema crítico.
-8. No Extrato, edite o valor de um lançamento: o saldo do mês acompanha.
+8. Lance uma despesa com tags `luz, apartamento`. Em *Gastos por tag*, as duas
+   aparecem com o mesmo valor; toque em `luz` para ver o histórico.
+9. No Extrato, edite o valor de um lançamento: o saldo do mês acompanha.
    Cancele-o e veja sair dos totais; reative e veja voltar.
-9. Marque **"Repetir automaticamente"** num lançamento e confira a regra
+10. Marque **"Repetir automaticamente"** num lançamento e confira a regra
    aparecendo na lista de recorrências, com a próxima ocorrência no mês seguinte.
-10. `Recorrentes → Gerar agora` duas vezes seguidas: a segunda deve dizer que
+11. `Recorrentes → Gerar agora` duas vezes seguidas: a segunda deve dizer que
     não havia nada a gerar.
-11. `Dados → Executar testes`: 14/14.
-12. Sem configurar IA, gere insights: a fonte deve ser `REGRAS` e as sugestões
+12. `Dados → Executar testes`: 15/15.
+13. Sem configurar IA, gere insights: a fonte deve ser `REGRAS` e as sugestões
    devem fazer sentido para os dados de exemplo.

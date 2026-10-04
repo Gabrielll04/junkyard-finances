@@ -37,6 +37,7 @@ var STATUS_LANCAMENTO = {
  *   {string=} descricao
  *   {string=} origem             padrao 'MANUAL'
  *   {string=} status             padrao 'CONFIRMADO'
+ *   {string|Array=} tags         rotulos livres, ex.: "luz" ou "agua, apartamento"
  * @param {Object=} opcoes {permitirDuplicado: boolean}
  * @return {Object} Lancamento gravado.
  */
@@ -139,6 +140,7 @@ function _inserirLancamento(payload, opcoes) {
     conta_destino: String(dados.conta_destino || ''),
     descricao: String(dados.descricao || ''),
     origem: String(dados.origem || 'MANUAL'),
+    tags: normalizarTags(dados.tags),
     status: status,
     criado_em: agora,
     atualizado_em: agora
@@ -358,6 +360,8 @@ function editarLancamento(idLancamento, payload) {
     if (dados.descricao !== undefined) campos.descricao = String(dados.descricao);
     if (dados.conta_origem !== undefined) campos.conta_origem = String(dados.conta_origem);
     if (dados.conta_destino !== undefined) campos.conta_destino = String(dados.conta_destino);
+    // Tags vazias sao um valor valido: e assim que se remove todas.
+    if (dados.tags !== undefined) campos.tags = normalizarTags(dados.tags);
 
     if (dados.status !== undefined && String(dados.status).trim() !== '') {
       var status = String(dados.status).trim().toUpperCase();
@@ -444,6 +448,7 @@ function excluirLancamento(idLancamento, modo, confirmacao) {
  *   {string=} tipo
  *   {string=} categoria
  *   {string=} metaId
+ *   {string=} tag        so lancamentos que tenham esta tag
  *   {boolean=} incluirCancelados
  *   {number=} limite
  * @return {Array<Object>} Do mais recente para o mais antigo.
@@ -464,6 +469,7 @@ function listarLancamentos(filtros) {
         normalizarTexto(l.categoria) !== normalizarTexto(f.categoria)) {
       return false;
     }
+    if (f.tag && !possuiTag(l.tags, f.tag)) return false;
     if (f.metaId &&
         String(l.meta_id || '').trim().toUpperCase() !== String(f.metaId).trim().toUpperCase()) {
       return false;
@@ -494,6 +500,127 @@ function somarPorTipoNoMes(tipo, mes) {
     if (!isNaN(valor)) total += valor;
   });
   return arredondar2(total);
+}
+
+// ===========================================================================
+// TAGS
+// ===========================================================================
+
+/**
+ * Agrupa as despesas do mes por tag, em ordem decrescente.
+ *
+ * Um lancamento com varias tags conta inteiro em cada uma delas ("luz" e
+ * "apartamento" recebem os R$ 120 da conta de luz). Por isso a soma das
+ * tags pode passar do total de despesas - tag e um corte transversal, nao
+ * uma particao como a categoria.
+ *
+ * @param {string} mes yyyy-MM
+ * @param {string=} tipo Padrao DESPESA.
+ * @return {Array<{tag: string, total: number, quantidade: number}>}
+ */
+function agruparPorTag(mes, tipo) {
+  var acumulado = {};
+  listarLancamentos({ mes: mes, tipo: tipo || TIPOS_LANCAMENTO.DESPESA }).forEach(function (l) {
+    var valor = paraNumero(l.valor);
+    if (isNaN(valor)) return;
+    listarTags(l.tags).forEach(function (tag) {
+      var chave = chaveTag(tag);
+      if (!acumulado[chave]) acumulado[chave] = { tag: tag, total: 0, quantidade: 0 };
+      acumulado[chave].total += valor;
+      acumulado[chave].quantidade++;
+    });
+  });
+  return Object.keys(acumulado)
+    .map(function (k) {
+      var item = acumulado[k];
+      return { tag: item.tag, total: arredondar2(item.total), quantidade: item.quantidade };
+    })
+    .sort(function (a, b) { return b.total - a.total; });
+}
+
+/**
+ * Historico de uma tag: total por mes nos ultimos N meses, total geral,
+ * media mensal e os lancamentos mais recentes.
+ *
+ * Responde perguntas como "quanto eu gastei de luz nos ultimos 6 meses?".
+ *
+ * @param {string} tag
+ * @param {Object=} opcoes {meses: number (padrao 6), tipo: string (padrao DESPESA)}
+ * @return {{tag: string, meses: Array<{mes: string, total: number, quantidade: number}>,
+ *           total: number, mediaMensal: number, mesesComGasto: number,
+ *           lancamentos: Array<Object>}}
+ */
+function consultarTag(tag, opcoes) {
+  var config = opcoes || {};
+  var alvo = chaveTag(tag);
+  if (!alvo) throw new Error('Informe a tag que deseja consultar.');
+
+  var quantidadeMeses = Math.max(parseInt(config.meses, 10) || 6, 1);
+  var tipo = config.tipo || TIPOS_LANCAMENTO.DESPESA;
+  var referencia = mesAtual();
+
+  var porMes = {};
+  var ordem = [];
+  for (var i = quantidadeMeses - 1; i >= 0; i--) {
+    var chave = deslocarMes(referencia, -i);
+    porMes[chave] = { mes: chave, total: 0, quantidade: 0 };
+    ordem.push(chave);
+  }
+
+  var grafiaUsada = '';
+  var encontrados = listarLancamentos({ tag: tag, tipo: tipo });
+  encontrados.forEach(function (l) {
+    if (!grafiaUsada) {
+      grafiaUsada = listarTags(l.tags).filter(function (t) {
+        return chaveTag(t) === alvo;
+      })[0] || '';
+    }
+    var mes = chaveMes(l.data);
+    if (!porMes[mes]) return; // fora da janela pedida
+    var valor = paraNumero(l.valor);
+    if (isNaN(valor)) return;
+    porMes[mes].total += valor;
+    porMes[mes].quantidade++;
+  });
+
+  var meses = ordem.map(function (k) {
+    return { mes: k, total: arredondar2(porMes[k].total), quantidade: porMes[k].quantidade };
+  });
+  var total = arredondar2(meses.reduce(function (acc, m) { return acc + m.total; }, 0));
+  var comGasto = meses.filter(function (m) { return m.total > 0; }).length;
+
+  return {
+    tag: grafiaUsada || String(tag).replace(/^#+/, '').trim(),
+    meses: meses,
+    total: total,
+    // Media sobre os meses em que houve gasto: conta de luz que ainda nao
+    // venceu este mes nao deve puxar a media para baixo.
+    mediaMensal: comGasto ? arredondar2(total / comGasto) : 0,
+    mesesComGasto: comGasto,
+    lancamentos: encontrados.slice(0, 10)
+  };
+}
+
+/**
+ * Todas as tags ja usadas, da mais frequente para a menos frequente.
+ * Alimenta as sugestoes na hora de lancar.
+ * @param {number=} limite Padrao 30.
+ * @return {Array<string>}
+ */
+function listarTagsUsadas(limite) {
+  var contagem = {};
+  lerTabela(ABAS.LANCAMENTOS).linhas.forEach(function (l) {
+    listarTags(l.tags).forEach(function (tag) {
+      var chave = chaveTag(tag);
+      if (!contagem[chave]) contagem[chave] = { tag: tag, vezes: 0 };
+      contagem[chave].vezes++;
+    });
+  });
+  return Object.keys(contagem)
+    .map(function (k) { return contagem[k]; })
+    .sort(function (a, b) { return b.vezes - a.vezes || a.tag.localeCompare(b.tag); })
+    .slice(0, limite || 30)
+    .map(function (item) { return item.tag; });
 }
 
 /**

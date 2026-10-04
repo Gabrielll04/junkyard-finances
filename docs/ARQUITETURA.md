@@ -213,6 +213,46 @@ um `try`; o `ReferenceError` que nasce daí já carrega o nome do identificador
 que faltou. `setupFinanceiro()` roda essa checagem antes de qualquer coisa e
 recusa começar com o projeto incompleto.
 
+**Memória por execução, não cache entre execuções.**
+O `CacheService` do Google é compartilhado entre execuções, mas cada consulta a
+ele é uma ida à rede. Medido num simulador que conta essas idas, um único
+lançamento pela sidebar fazia **1.782 consultas** ao cache: cada `formatarData()`
+perguntava o fuso horário, que perguntava a configuração, que ia ao cache —
+várias vezes por linha da planilha. Somavam-se ~190 leituras de planilha, porque
+as mesmas abas eram relidas inteiras a cada etapa.
+
+O `Repositorio.gs` agora guarda abas, cabeçalhos, tabelas e configuração numa
+variável global. O Apps Script recria as globais a cada execução, então essa
+memória nunca fica velha entre um uso e outro — ela só evita reler, dentro da
+mesma execução, o que já foi lido. Quem lê recebe cópias das linhas: várias
+funções anexam campos calculados ao que recebem, e isso não pode vazar para a
+próxima leitura. Toda escrita passa pela camada de dados, que mantém a memória
+coerente (acrescenta linhas novas, atualiza a linha alterada, invalida em
+exclusões). Resultado medido: **3 consultas ao cache e ~22 leituras**.
+
+**Uma ida ao servidor por operação da sidebar.**
+Antes, lançar uma despesa eram duas execuções: a primeira salvava e atualizava o
+painel; a sidebar então pedia o estado inteiro, recalculando tudo do zero. Agora
+`_concluirAlteracaoSidebar()` calcula os indicadores uma vez, atualiza a aba
+Dashboard com eles e devolve o estado pronto na própria resposta.
+
+**Tag em vez de subcategoria.**
+Subcategoria prende cada gasto a um único galho da árvore. Tag é livre e
+múltipla: `luz, apartamento` permite perguntar pelo gasto de luz e pelo custo do
+apartamento, que atravessa várias categorias. O preço é que somar as tags não dá
+o total de despesas — um lançamento com duas tags conta inteiro em cada uma — e
+isso está dito em toda tela que mostra total por tag. A comparação ignora caixa,
+acento e `#`, mas grava a grafia que o usuário digitou primeiro.
+
+**Coluna nova sempre no fim, criada no primeiro uso.**
+As fórmulas do painel apontam para colunas de `Lancamentos` por letra. Por isso
+`tags` entra depois de `atualizado_em`, e não perto de `categoria`, onde faria
+mais sentido visual. E quando o código tenta gravar numa coluna prevista em
+`CABECALHOS` que a planilha do usuário ainda não tem, a camada de dados a cria
+antes de escrever (`_mapaComColunasNecessarias`). Antes, um valor para coluna
+inexistente era descartado em silêncio — uma planilha anterior às tags
+"aceitaria" as tags e as perderia.
+
 **Escrita em lote, sempre.**
 `lerTabela()` faz um `getValues()` da tabela inteira e devolve objetos com
 `_linha`. `adicionarLinhas()` e `atualizarCamposCalculadosMetas()` escrevem

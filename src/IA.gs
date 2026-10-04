@@ -183,6 +183,11 @@ function montarResumoParaIA(indicadores) {
     top_categorias_despesa: ind.topCategorias.map(function (c) {
       return { categoria: c.categoria, total: c.total };
     }),
+    // Tags sao rotulos que o proprio usuario criou (ex.: "luz", "agua").
+    // Vao so nome e total agregado, como as categorias.
+    top_tags_despesa: (ind.topTags || []).map(function (t) {
+      return { tag: t.tag, total: t.total };
+    }),
     metas: ind.metas
       .filter(function (m) { return String(m.tipo).toUpperCase() !== TIPOS_META.RESERVA; })
       .slice(0, 8)

@@ -102,6 +102,9 @@ Os três primeiros itens desta lista saíram do roadmap e estão no sistema:
   com uma mensagem que aponta o caminho certo.
 
 **Curto prazo**
+- Bloco de tags na aba Dashboard. Hoje elas aparecem na sidebar e no menu;
+  a aba tem layout fixo e precisaria ganhar uma área nova.
+- Orçamento por tag ("no máximo R$ 200 de luz"), reaproveitando `consultarTag`.
 - Filtro de período no painel (trimestre, ano, intervalo livre).
 - Exportar CSV de um período.
 - Marcar **por lançamento** se ele é recorrente ou pontual. Hoje a distinção

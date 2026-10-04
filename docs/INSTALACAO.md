@@ -215,6 +215,7 @@ Há duas leituras diferentes, e vale saber qual usar:
 |---|---|
 | Menu **Financeiro** não aparece | Recarregue a planilha. Se persistir, rode `onOpen` manualmente no editor. |
 | Sidebar mostra `PERMISSION_DENIED` / "erro no servidor durante a leitura do armazenamento", e a lista de categorias fica vazia | **Mais de uma conta Google logada no navegador.** O `google.script.run` da sidebar é enviado com a conta errada — limitação conhecida do Google, não erro do sistema. Abra a planilha numa **janela anônima** ou num **perfil do Chrome** com só a conta dona da planilha. O menu `Financeiro → Registrar despesa` não usa esse canal e continua funcionando. |
+| Sidebar demora a responder | Com a versão atual, um lançamento faz uma única ida ao servidor. Se continuar lento, rode `Dados → Verificar instalação`: um `Repositorio.gs` antigo não tem a memória por execução. |
 | `<nome da função> is not defined` | Algum arquivo não foi copiado, ou foi colado pela metade. Rode **`Dados → Verificar instalação`** (ou a função `verificarInstalacao` no editor): ela diz exatamente qual arquivo falta. |
 | "Sistema ocupado com outra operação" | Duas operações simultâneas. Aguarde alguns segundos. |
 | "Chave de API ausente" | A propriedade do script não foi salva, ou o nome está diferente de `GEMINI_API_KEY`/`GROQ_API_KEY`. |
@@ -523,3 +524,54 @@ O Google às vezes mantém a concessão antiga em cache. Revogue e refaça:
 
 Se você não pretende usar IA, backup nem gatilho, pode remover as três últimas
 da lista. As duas primeiras são obrigatórias.
+
+
+## 3.12 Tags: separar gastos dentro de uma categoria
+
+A categoria diz **o tipo** do gasto (`Contas fixas`). A tag diz **o que é**
+(`luz`, `agua`, `internet`). Um lançamento pode ter várias tags, separadas por
+vírgula: a conta de luz pode levar `luz, apartamento`, e aí você responde tanto
+"quanto gastei de luz" quanto "quanto custa o apartamento", mesmo que o
+apartamento tenha gastos em várias categorias.
+
+### Onde informar
+
+- **Sidebar → Lançar:** campo *Tags*. Abaixo dele aparecem as tags que você já
+  usou; clique para adicionar ou remover sem digitar.
+- **Sidebar → Extrato → Editar:** para pôr tags em lançamentos antigos.
+- **Menu `Registrar despesa`/`receita`:** a última pergunta é das tags.
+- **Recorrências:** a tag da regra vai para cada lançamento gerado — a conta de
+  luz recorrente já nasce com `luz`.
+
+Maiúsculas, acentos e `#` não importam: `Água`, `agua` e `#agua` são a mesma tag.
+
+### Onde consultar
+
+- **Sidebar → Painel → Gastos por tag:** total de cada tag no mês. Toque numa
+  tag para ver os últimos 6 meses em barras, com total e média.
+- **Sidebar → Extrato:** filtro por tag; tocar numa tag de um lançamento liga o
+  filtro.
+- **Menu `Lançamentos → Gastos por tag (mês)`** e **`Consultar uma tag`**.
+
+> Um lançamento com duas tags conta **inteiro em cada uma**. Por isso a soma
+> das tags pode passar do total de despesas — tag é um recorte, não uma
+> divisão como a categoria.
+
+### Na própria planilha
+
+As tags ficam na coluna **N** da aba `Lancamentos`. Para uma célula sua com o
+gasto de luz (planilha em português, separador `;`):
+
+```
+=SOMASES(Lancamentos!D:D; Lancamentos!C:C; "DESPESA"; Lancamentos!N:N; "*luz*"; Lancamentos!K:K; "<>CANCELADO")
+```
+
+`SUMIFS` também funciona, em qualquer idioma de planilha. O `*luz*` procura o texto em qualquer parte da célula, então também pegaria uma
+tag `luzia`. Os totais da sidebar não têm esse problema: lá a tag é comparada
+inteira.
+
+### Planilha criada antes das tags
+
+Não precisa fazer nada. No primeiro lançamento com tag, o sistema cria a coluna
+`tags` no **fim** da aba `Lancamentos` — as fórmulas do painel apontam para as
+colunas B, C, D e K e continuam certas — e nenhum dado existente é alterado.

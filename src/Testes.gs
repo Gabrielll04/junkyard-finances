@@ -712,6 +712,118 @@ function testRecorrentes() {
   });
 }
 
+/** Testa as tags: gravacao, normalizacao, filtro, agregacao e historico. */
+function testTags() {
+  return _executarTeste('testTags', function (t) {
+    // --- normalizacao (pura) ------------------------------------------------
+    t.afirmarIgual(normalizarTags('Agua, luz; #luz , ,  '), 'Agua, luz',
+                   'separa por virgula/ponto e virgula, tira # e repetidas');
+    t.afirmarIgual(normalizarTags(['luz', 'LUZ', 'Luz']), 'luz',
+                   'repetidas com caixa diferente viram uma so');
+    t.afirmarIgual(normalizarTags('água, agua'), 'água',
+                   'acento nao cria tag nova; vale a primeira grafia');
+    t.afirmarIgual(normalizarTags(''), '', 'vazio continua vazio');
+    t.afirmarIgual(normalizarTags(null), '', 'nulo vira vazio');
+    t.afirmar(possuiTag('Agua, luz', 'ÁGUA'), 'busca ignora caixa e acento');
+    t.afirmar(!possuiTag('luzia', 'luz'), 'tag e comparada inteira, nao por pedaco');
+
+    // --- gravacao ------------------------------------------------------------
+    var mes = chaveMes(new Date());
+    var sufixo = String(Math.floor(Math.random() * 100000));
+    var tagLuz = 'luzteste' + sufixo;
+    var tagAgua = 'aguateste' + sufixo;
+    var tagCasa = 'casateste' + sufixo;
+
+    var luz = registrarLancamento({
+      data: new Date(), tipo: TIPOS_LANCAMENTO.DESPESA, valor: 120,
+      categoria: 'Contas fixas', descricao: 'Conta de luz teste',
+      tags: tagLuz + ', ' + tagCasa, origem: MARCADOR_TESTE
+    });
+    t.lancamentosCriados.push(luz.id_lancamento);
+    var agua = registrarLancamento({
+      data: new Date(), tipo: TIPOS_LANCAMENTO.DESPESA, valor: 80,
+      categoria: 'Contas fixas', descricao: 'Conta de agua teste',
+      tags: '#' + tagAgua + '; ' + tagCasa, origem: MARCADOR_TESTE
+    });
+    t.lancamentosCriados.push(agua.id_lancamento);
+    var semTag = registrarLancamento({
+      data: new Date(), tipo: TIPOS_LANCAMENTO.DESPESA, valor: 33,
+      categoria: 'Contas fixas', descricao: 'Sem tag teste', origem: MARCADOR_TESTE
+    });
+    t.lancamentosCriados.push(semTag.id_lancamento);
+
+    t.afirmarIgual(obterLancamento(luz.id_lancamento).tags, tagLuz + ', ' + tagCasa,
+                   'tags gravadas na planilha');
+    t.afirmarIgual(obterLancamento(agua.id_lancamento).tags, tagAgua + ', ' + tagCasa,
+                   'tags normalizadas antes de gravar');
+    t.afirmarIgual(String(obterLancamento(semTag.id_lancamento).tags), '',
+                   'lancamento sem tag fica com a coluna vazia');
+
+    // --- a pergunta do usuario: separar agua e luz dentro de "Contas fixas" --
+    var grupos = {};
+    agruparPorTag(mes).forEach(function (g) { grupos[chaveTag(g.tag)] = g; });
+    t.afirmarProximo(grupos[tagLuz].total, 120, 'total da tag de luz');
+    t.afirmarProximo(grupos[tagAgua].total, 80, 'total da tag de agua');
+    t.afirmarProximo(grupos[tagCasa].total, 200,
+                     'lancamento com duas tags conta inteiro em cada uma');
+    t.afirmarIgual(grupos[tagCasa].quantidade, 2, 'quantidade por tag');
+
+    // --- filtro do extrato ---------------------------------------------------
+    var soLuz = listarLancamentos({ tag: tagLuz.toUpperCase() });
+    t.afirmarIgual(soLuz.length, 1, 'filtro por tag ignora caixa');
+    t.afirmarIgual(soLuz[0].id_lancamento, luz.id_lancamento, 'filtro devolve o lancamento certo');
+    t.afirmarIgual(listarLancamentos({ tag: tagCasa }).length, 2, 'filtro pela tag comum');
+
+    // --- historico de 6 meses -----------------------------------------------
+    var historico = consultarTag(tagCasa, { meses: 6 });
+    t.afirmarIgual(historico.meses.length, 6, 'janela de 6 meses');
+    t.afirmarIgual(historico.meses[5].mes, mes, 'ultimo mes da janela e o atual');
+    t.afirmarProximo(historico.meses[5].total, 200, 'total do mes atual na tag');
+    t.afirmarProximo(historico.total, 200, 'total da janela');
+    t.afirmarIgual(historico.mesesComGasto, 1, 'meses com gasto');
+    t.afirmarProximo(historico.mediaMensal, 200,
+                     'media considera so os meses com gasto');
+    t.afirmarErro(function () { consultarTag(''); }, 'consulta sem tag e recusada');
+
+    // --- edicao --------------------------------------------------------------
+    editarLancamento(luz.id_lancamento, { tags: tagLuz });
+    t.afirmarIgual(obterLancamento(luz.id_lancamento).tags, tagLuz, 'tags editadas');
+    t.afirmarProximo(consultarTag(tagCasa).total, 80, 'tag removida sai do historico');
+    editarLancamento(luz.id_lancamento, { tags: '' });
+    t.afirmarIgual(String(obterLancamento(luz.id_lancamento).tags), '',
+                   'tags vazias removem todas');
+    editarLancamento(luz.id_lancamento, { valor: 121 });
+    t.afirmarIgual(String(obterLancamento(luz.id_lancamento).tags), '',
+                   'editar outro campo nao mexe nas tags');
+
+    // --- sugestoes -----------------------------------------------------------
+    var usadas = listarTagsUsadas(100).map(chaveTag);
+    t.afirmar(usadas.indexOf(chaveTag(tagCasa)) !== -1, 'tags usadas aparecem nas sugestoes');
+
+    // --- recorrencia carrega as tags ----------------------------------------
+    var hoje = new Date();
+    var regra = criarRecorrente({
+      descricao: PREFIXO_NOME_TESTE + 'Luz recorrente', tipo: 'DESPESA', valor: 99,
+      categoria: 'Contas fixas', dia_do_mes: 1, frequencia_meses: 1,
+      data_inicio: new Date(hoje.getFullYear(), hoje.getMonth(), 1),
+      tags: tagLuz + ', recorrente'
+    });
+    t.recorrentesCriadas.push(regra.id_recorrente);
+    gerarLancamentosRecorrentes({ idRecorrente: regra.id_recorrente });
+    var gerado = listarLancamentos({ limite: 500 }).filter(function (l) {
+      return String(l.origem || '').indexOf('RECORRENTE:' + regra.id_recorrente) === 0;
+    })[0];
+    t.afirmar(!!gerado, 'recorrencia gerou o lancamento do mes');
+    t.afirmar(possuiTag(gerado.tags, tagLuz), 'lancamento gerado herda as tags da regra');
+
+    // --- coluna nova em planilha antiga -------------------------------------
+    // Simula uma instalacao anterior as tags: sem a coluna, a primeira
+    // gravacao com tags tem de cria-la, e nao descartar o valor em silencio.
+    t.afirmar(obterMapaCabecalhos(obterAbaSegura(ABAS.LANCAMENTOS)).tags !== undefined,
+              'a aba Lancamentos tem a coluna tags');
+  });
+}
+
 // ===========================================================================
 // TESTES: PREVISOES (funcoes puras)
 // ===========================================================================
@@ -1074,6 +1186,7 @@ function executarTodosOsTestes() {
     testAporteMeta,
     testResgateMeta,
     testRecorrentes,
+    testTags,
     testIndicadores,
     testFallbackIA,
     testIntegridadeDados

@@ -55,6 +55,7 @@ var LIMITE_OCORRENCIAS_POR_REGRA = 600;
  *   {Date|string=} data_inicio  padrao hoje
  *   {Date|string=} data_fim     opcional
  *   {string=} observacoes
+ *   {string|Array=} tags        copiadas para cada lancamento gerado
  * @return {Object} Regra criada, com os campos calculados.
  */
 function criarRecorrente(payload) {
@@ -127,7 +128,8 @@ function criarRecorrente(payload) {
       total_gerado: 0,
       criado_em: agora,
       atualizado_em: agora,
-      observacoes: String(dados.observacoes || '')
+      observacoes: String(dados.observacoes || ''),
+      tags: normalizarTags(dados.tags)
     });
 
     logInfo('criarRecorrente', 'Recorrencia criada: ' + descricao,
@@ -193,6 +195,8 @@ function _enriquecerRecorrente(recorrente) {
   }
   recorrente.resumo = recorrente.descricao + ' - ' + formatarMoeda(recorrente.valorNumerico) +
     ' - ' + recorrente.frequenciaTexto + ', dia ' + recorrente.dia_do_mes;
+  var tags = listarTags(recorrente.tags);
+  if (tags.length) recorrente.resumo += ' [' + tags.join(', ') + ']';
   return recorrente;
 }
 
@@ -250,6 +254,7 @@ function editarRecorrente(id, payload) {
         ? 'SIM' : 'NAO';
     }
     if (dados.observacoes !== undefined) campos.observacoes = String(dados.observacoes);
+    if (dados.tags !== undefined) campos.tags = normalizarTags(dados.tags);
 
     if (!Object.keys(campos).length) {
       throw new Error('Nenhum campo valido para atualizar.');
@@ -550,7 +555,8 @@ function _gerarUmaOcorrencia(regra, data, chave) {
     categoria: regra.categoria,
     descricao: descricao,
     origem: chave,
-    status: STATUS_LANCAMENTO.CONFIRMADO
+    status: STATUS_LANCAMENTO.CONFIRMADO,
+    tags: regra.tags
   }, { permitirDuplicado: true }); // a chave de origem ja garante a unicidade
 
   return {
@@ -643,7 +649,8 @@ function criarRecorrenteAPartirDeLancamento(lancamento, frequenciaMeses) {
     data_inicio: new Date(data.getFullYear(),
                           data.getMonth() + (frequenciaMeses || 1),
                           1),
-    observacoes: 'Criada a partir do lancamento ' + (origem.id_lancamento || '')
+    observacoes: 'Criada a partir do lancamento ' + (origem.id_lancamento || ''),
+    tags: origem.tags
   });
 }
 

@@ -35,10 +35,11 @@ ele gera sugestões por regras internas.
 | `src/IA.gs` | Integração opcional com Gemini/Groq, cache, retry, parsing tolerante e fallback. |
 | `src/UI.gs` | Menu personalizado, diálogos nativos e funções expostas à sidebar. |
 | `src/Sidebar.html` | Interface HTML embutida (CSS + JS inline, sem dependências externas). |
-| `src/Testes.gs` | 14 funções de teste + execução em bateria, com limpeza automática. |
+| `src/Testes.gs` | 15 funções de teste + execução em bateria, com limpeza automática. |
 | `src/ImportacaoFutura.gs` | Estrutura e stubs para importação de holerites/comprovantes. |
 | `src/Vincular.gs` | **Uso único.** Cria um projeto Apps Script já vinculado a uma planilha e copia o código para ele, via API do Apps Script. Resolve o caso de quem criou um projeto avulso por engano. |
 | `src/appsscript.migracao.json` | Manifesto temporário com os escopos que `Vincular.gs` precisa. |
+| `ferramentas/` | Simulador do Apps Script em Node: roda a bateria de testes e a sidebar fora do Google (`cd ferramentas && npm install && npm test`). Não vai para o Apps Script. |
 
 ## Início rápido
 

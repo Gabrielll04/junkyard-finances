@@ -162,6 +162,28 @@
       padding: 8px; margin-bottom: 8px; background: #f8fbff;
     }
     .filtros { display: flex; gap: 6px; margin-bottom: 8px; }
+
+    /* --- tags --- */
+    .tag {
+      display: inline-block; padding: 1px 7px; margin: 2px 3px 0 0;
+      border-radius: 10px; font-size: 10px; cursor: pointer;
+      background: #e6f4ea; color: var(--verde); border: 1px solid #c6e7d0;
+    }
+    .tag:hover { background: #d2ecd9; }
+    .sugestoes-tags { margin-top: 4px; }
+    .sugestoes-tags .tag { background: #f1f3f4; color: var(--cinza); border-color: var(--borda); }
+    .sugestoes-tags .tag.usada { background: #e6f4ea; color: var(--verde); border-color: #c6e7d0; }
+    .linha-tag {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 5px 0; border-bottom: 1px solid #f1f3f4; cursor: pointer; font-size: 12px;
+    }
+    .linha-tag:hover { background: #f8f9fa; }
+    .barras-tag { margin-top: 6px; }
+    .barra-mes { display: flex; align-items: center; gap: 6px; font-size: 11px; margin: 3px 0; }
+    .barra-mes .rotulo { width: 44px; color: var(--cinza); }
+    .barra-mes .trilho { flex: 1; height: 8px; background: #eceff1; border-radius: 4px; overflow: hidden; }
+    .barra-mes .trilho > div { height: 100%; background: var(--verde); }
+    .barra-mes .valor { width: 82px; text-align: right; }
     .filtros select { font-size: 12px; padding: 4px; }
   </style>
 </head>
@@ -195,6 +217,10 @@
 
     <h3>Maiores gastos</h3>
     <ul class="lista" id="listaCategorias"></ul>
+
+    <h3>Gastos por tag</h3>
+    <div id="listaTags"></div>
+    <div id="detalheTag"></div>
 
     <h3>Alertas</h3>
     <ul class="lista" id="listaAlertas"></ul>
@@ -232,6 +258,10 @@
 
       <label for="lancDescricao">Descricao (opcional)</label>
       <input type="text" id="lancDescricao" maxlength="200">
+
+      <label for="lancTags">Tags (opcional, separe por virgula)</label>
+      <input type="text" id="lancTags" maxlength="200" placeholder="Ex.: luz, apartamento">
+      <div class="sugestoes-tags" id="sugestoesTagsLanc"></div>
 
       <div class="caixa-marcacao">
         <input type="checkbox" id="lancRepetir">
@@ -277,6 +307,9 @@
         <option value="DESPESA">Despesas</option>
         <option value="APORTE_META">Aportes</option>
         <option value="RESGATE_META">Resgates</option>
+      </select>
+      <select id="filtroTag">
+        <option value="">Todas as tags</option>
       </select>
       <select id="filtroLimite">
         <option value="25">25 ultimos</option>
@@ -577,7 +610,13 @@ function renderizar(estado) {
   preencherSelecoesDeMeta(estado.metas);
   preencherCategorias();
   renderizarInsights(estado.insights, estado.statusIa);
-  renderizarExtrato(estado.ultimosLancamentos);
+  renderizarTagsDoMes(estado.tagsDoMes);
+  preencherFiltroTags(estado.tagsConhecidas);
+  renderizarSugestoesTags('sugestoesTagsLanc', 'lancTags');
+  // Com filtro ativo, a lista que veio no estado (sem filtro) nao serve:
+  // pede de novo ao servidor, respeitando o que esta selecionado.
+  if (filtroExtratoAtivo()) recarregarExtrato();
+  else renderizarExtrato(estado.ultimosLancamentos);
   renderizarRecorrentes(estado.recorrentes, estado.comprometimento);
 }
 
@@ -597,6 +636,10 @@ function renderizarExtrato(lista) {
 
     var info = l.data + ' - ' + l.tipo.replace('_', ' ') + ' - ' + escapar(l.categoria);
     if (l.origem && l.origem.indexOf('RECORRENTE:') === 0) info += ' - recorrente';
+    var tagsHtml = (l.tags || []).map(function (t) {
+      return '<span class="tag" data-filtrar-tag="' + escapar(t) + '" title="Filtrar por esta tag">' +
+        escapar(t) + '</span>';
+    }).join('');
 
     var botoes;
     if (!l.editavel) {
@@ -620,6 +663,7 @@ function renderizarExtrato(lista) {
         '<div class="titulo">' + escapar(l.descricao || l.categoria) +
         (l.cancelado ? '<span class="chip inativa">cancelado</span>' : '') + '</div>' +
         '<div class="meta-info">' + info + '</div>' +
+        (tagsHtml ? '<div>' + tagsHtml + '</div>' : '') +
       '</div><div class="valor ' + classeValor + '">' + escapar(l.valor) + '</div></div>' +
       '<div class="botoes">' + botoes + '</div>' +
     '</div>';
@@ -657,6 +701,10 @@ function abrirEdicaoLancamento(id) {
       '<label for="edDescricao">Descricao</label>' +
       '<input type="text" id="edDescricao" maxlength="200" value="' +
         escapar(lancamento.descricao) + '">' +
+      '<label for="edTags">Tags (separe por virgula)</label>' +
+      '<input type="text" id="edTags" maxlength="200" value="' +
+        escapar((lancamento.tags || []).join(', ')) + '">' +
+      '<div class="sugestoes-tags" id="sugestoesTagsEd"></div>' +
       '<div class="botoes" style="margin-top:10px">' +
         '<button type="button" class="mini destaque" data-acao="salvar" data-id="' +
           escapar(id) + '">Salvar</button>' +
@@ -664,6 +712,7 @@ function abrirEdicaoLancamento(id) {
       '</div>' +
     '</div>';
 
+  renderizarSugestoesTags('sugestoesTagsEd', 'edTags');
   document.getElementById('formEdicaoLancamento').scrollIntoView({ block: 'nearest' });
 }
 
@@ -676,6 +725,7 @@ function fecharEdicaoLancamento() {
 function recarregarExtrato() {
   chamarServidor('uiListarLancamentos', {
     tipo: document.getElementById('filtroTipo').value,
+    tag: document.getElementById('filtroTag').value,
     limite: parseInt(document.getElementById('filtroLimite').value, 10),
     incluirCancelados: true
   }, function (lista) {
@@ -684,6 +734,106 @@ function recarregarExtrato() {
   }, function (erro) {
     mostrarMensagem('msgExtrato', erro, 'erro');
   });
+}
+
+/* ---------------------------- TAGS ---------------------------- */
+
+/** Chave de comparacao igual a do servidor: minuscula, sem acento, sem #. */
+function chaveTagCliente(tag) {
+  return String(tag || '').replace(/^#+/, '').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+/** Tags ja digitadas num campo, como array. */
+function tagsDoCampo(idCampo) {
+  return document.getElementById(idCampo).value.split(/[,;]/)
+    .map(function (t) { return t.trim(); }).filter(Boolean);
+}
+
+/**
+ * Chips com as tags mais usadas abaixo de um campo. Clicar adiciona (ou
+ * remove, se ja estiver la) a tag no campo. Um datalist nao serve aqui: ele so
+ * sugere o campo inteiro, e um lancamento pode ter varias tags.
+ */
+function renderizarSugestoesTags(idContainer, idCampo) {
+  var container = document.getElementById(idContainer);
+  if (!container) return;
+  var conhecidas = (estadoAtual && estadoAtual.tagsConhecidas) || [];
+  if (!conhecidas.length) { container.innerHTML = ''; return; }
+
+  var noCampo = tagsDoCampo(idCampo).map(chaveTagCliente);
+  container.innerHTML = conhecidas.slice(0, 15).map(function (t) {
+    var usada = noCampo.indexOf(chaveTagCliente(t)) !== -1;
+    return '<span class="tag' + (usada ? ' usada' : '') + '" data-alternar-tag="' +
+      escapar(t) + '" data-campo="' + idCampo + '">' + (usada ? '&#10003; ' : '+ ') +
+      escapar(t) + '</span>';
+  }).join('');
+}
+
+/** Adiciona ou remove uma tag do campo. */
+function alternarTagNoCampo(idCampo, tag) {
+  var atuais = tagsDoCampo(idCampo);
+  var chave = chaveTagCliente(tag);
+  var semEla = atuais.filter(function (t) { return chaveTagCliente(t) !== chave; });
+  var novas = semEla.length === atuais.length ? atuais.concat([tag]) : semEla;
+  document.getElementById(idCampo).value = novas.join(', ');
+}
+
+/** Lista "Gastos por tag" do painel. */
+function renderizarTagsDoMes(tags) {
+  var container = document.getElementById('listaTags');
+  if (!tags || !tags.length) {
+    container.innerHTML = '<p class="vazio">Nenhuma despesa com tag neste mes. ' +
+      'Adicione tags ao lancar (ex.: luz, agua) para ver o gasto de cada uma.</p>';
+    return;
+  }
+  container.innerHTML = tags.map(function (t) {
+    return '<div class="linha-tag" data-consultar-tag="' + escapar(t.tag) + '">' +
+      '<span><span class="tag">' + escapar(t.tag) + '</span> ' +
+      '<span class="vazio">' + t.quantidade + 'x</span></span>' +
+      '<strong>' + escapar(t.total) + '</strong></div>';
+  }).join('') +
+  '<p class="aviso">Toque numa tag para ver os ultimos 6 meses. Um lancamento com ' +
+  'duas tags conta em cada uma.</p>';
+}
+
+/** Mostra o historico de 6 meses de uma tag no painel. */
+function consultarTagNoPainel(tag) {
+  var destino = document.getElementById('detalheTag');
+  chamarServidor('uiConsultarTag', { tag: tag, meses: 6 }, function (d) {
+    destino.innerHTML = '<div class="meta">' +
+      '<div class="topo"><span class="nome">' + escapar(d.tag) + ' - 6 meses</span>' +
+      '<button type="button" class="mini" data-fechar-tag="1">Fechar</button></div>' +
+      '<div class="barras-tag">' + d.meses.map(function (m) {
+        return '<div class="barra-mes"><span class="rotulo">' + escapar(m.rotulo) + '</span>' +
+          '<span class="trilho"><div style="width:' + m.proporcao + '%"></div></span>' +
+          '<span class="valor">' + escapar(m.total) + '</span></div>';
+      }).join('') + '</div>' +
+      '<div class="detalhe">Total: <strong>' + escapar(d.total) + '</strong> - media de ' +
+      escapar(d.media) + ' nos ' + d.mesesComGasto + ' meses com gasto</div>' +
+      '</div>';
+  }, function (erro) {
+    destino.innerHTML = '<p class="vazio">' + escapar(erro) + '</p>';
+  });
+}
+
+/** Preenche o seletor de tag do extrato, preservando a escolha atual. */
+function preencherFiltroTags(tags) {
+  var select = document.getElementById('filtroTag');
+  var atual = select.value;
+  select.innerHTML = '<option value="">Todas as tags</option>' +
+    (tags || []).map(function (t) {
+      return '<option value="' + escapar(t) + '">' + escapar(t) + '</option>';
+    }).join('');
+  select.value = atual;
+  if (select.value !== atual) select.value = ''; // a tag sumiu (ex.: lancamento apagado)
+}
+
+/** Ha algum filtro do extrato ligado? */
+function filtroExtratoAtivo() {
+  return !!(document.getElementById('filtroTipo').value ||
+            document.getElementById('filtroTag').value ||
+            document.getElementById('filtroLimite').value !== '25');
 }
 
 /* ---------------------------- RECORRENCIAS ---------------------------- */
@@ -713,6 +863,7 @@ function renderizarRecorrentes(regras, comprometimento) {
   container.innerHTML = regras.map(function (r) {
     var detalhe = r.frequencia + ', dia ' + r.diaDoMes +
       (r.meta ? ' - meta: ' + escapar(r.meta) : ' - ' + escapar(r.categoria));
+    if (r.tags && r.tags.length) detalhe += '<br>Tags: ' + r.tags.map(escapar).join(', ');
     if (r.proxima) detalhe += '<br>Proxima: ' + escapar(r.proxima);
     if (r.totalGerado) detalhe += ' - ja geradas: ' + r.totalGerado;
 
@@ -886,6 +1037,7 @@ document.getElementById('formLancamento').addEventListener('submit', function (e
     data: document.getElementById('lancData').value,
     categoria: categoria,
     descricao: document.getElementById('lancDescricao').value.trim(),
+    tags: document.getElementById('lancTags').value,
     repetir: repetir,
     frequencia_meses: parseInt(document.getElementById('lancFrequencia').value, 10)
   }, function (dados) {
@@ -903,6 +1055,7 @@ document.getElementById('formLancamento').addEventListener('submit', function (e
     mostrarMensagem('msgLancamento', texto, tipoMensagem);
     document.getElementById('lancValor').value = '';
     document.getElementById('lancDescricao').value = '';
+    document.getElementById('lancTags').value = '';
     document.getElementById('lancRepetir').checked = false;
     document.getElementById('blocoFrequencia').style.display = 'none';
     aplicarEstado(dados);
@@ -1090,6 +1243,37 @@ document.getElementById('listaRecorrentes').addEventListener('click', function (
 /* ------------------- EXTRATO: filtros e acoes ------------------- */
 
 document.getElementById('filtroTipo').addEventListener('change', recarregarExtrato);
+document.getElementById('filtroTag').addEventListener('change', recarregarExtrato);
+
+// Chips de sugestao de tag (Lancar e formulario de edicao): delegacao no
+// documento, porque o formulario de edicao e recriado a cada abertura.
+document.addEventListener('click', function (evento) {
+  var chip = evento.target.closest('[data-alternar-tag]');
+  if (chip) {
+    alternarTagNoCampo(chip.dataset.campo, chip.dataset.alternarTag);
+    renderizarSugestoesTags(chip.parentNode.id, chip.dataset.campo);
+    return;
+  }
+  var filtrar = evento.target.closest('[data-filtrar-tag]');
+  if (filtrar) {
+    document.getElementById('filtroTag').value = filtrar.dataset.filtrarTag;
+    recarregarExtrato();
+    return;
+  }
+  var consultar = evento.target.closest('[data-consultar-tag]');
+  if (consultar) {
+    consultarTagNoPainel(consultar.dataset.consultarTag);
+    return;
+  }
+  if (evento.target.closest('[data-fechar-tag]')) {
+    document.getElementById('detalheTag').innerHTML = '';
+  }
+});
+
+// Digitar no campo atualiza os chips (marca/desmarca as ja presentes).
+document.getElementById('lancTags').addEventListener('input', function () {
+  renderizarSugestoesTags('sugestoesTagsLanc', 'lancTags');
+});
 document.getElementById('filtroLimite').addEventListener('change', recarregarExtrato);
 
 document.getElementById('listaExtrato').addEventListener('click', function (evento) {
@@ -1170,7 +1354,8 @@ document.getElementById('formEdicaoLancamento').addEventListener('click', functi
     valor: valor,
     data: document.getElementById('edData').value,
     categoria: categoria,
-    descricao: document.getElementById('edDescricao').value.trim()
+    descricao: document.getElementById('edDescricao').value.trim(),
+    tags: document.getElementById('edTags').value
   }, function (dados) {
     mostrarMensagem('msgExtrato', 'Atualizado: ' + dados.texto, 'ok');
     fecharEdicaoLancamento();

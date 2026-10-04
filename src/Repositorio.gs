@@ -42,13 +42,16 @@ CABECALHOS[ABAS.METAS] = [
 CABECALHOS[ABAS.LANCAMENTOS] = [
   'id_lancamento', 'data', 'tipo', 'valor', 'categoria', 'meta_id',
   'conta_origem', 'conta_destino', 'descricao', 'origem', 'status',
-  'criado_em', 'atualizado_em'
+  'criado_em', 'atualizado_em',
+  // Colunas novas entram SEMPRE no fim: o painel referencia colunas desta aba
+  // por letra (B, C, D, K) nas formulas SUMIFS.
+  'tags'
 ];
 CABECALHOS[ABAS.RECORRENTES] = [
   'id_recorrente', 'descricao', 'tipo', 'valor', 'categoria', 'meta_id',
   'dia_do_mes', 'frequencia_meses', 'data_inicio', 'data_fim', 'ativo',
   'ultima_geracao', 'proxima_geracao', 'total_gerado', 'criado_em',
-  'atualizado_em', 'observacoes'
+  'atualizado_em', 'observacoes', 'tags'
 ];
 CABECALHOS[ABAS.METAS_MOVIMENTOS] = [
   'id_movimento', 'data', 'meta_id', 'tipo_movimento', 'valor',
@@ -280,6 +283,38 @@ function obterMapaCabecalhos(aba) {
 }
 
 /**
+ * Mapa de cabecalhos garantindo que existam as colunas que o codigo quer
+ * gravar. Se o sistema ganhou uma coluna nova (ex.: "tags") e a planilha do
+ * usuario ainda nao tem, ela e criada aqui, na primeira escrita, em vez de o
+ * valor ser descartado em silencio por falta de coluna.
+ *
+ * So age sobre colunas previstas em CABECALHOS: chave desconhecida continua
+ * sendo ignorada, como sempre.
+ *
+ * @param {Sheet} aba
+ * @param {string} nomeAba
+ * @param {Array<Object>} objetos
+ * @return {Object<string, number>}
+ * @private
+ */
+function _mapaComColunasNecessarias(aba, nomeAba, objetos) {
+  var mapa = obterMapaCabecalhos(aba);
+  var previstas = CABECALHOS[nomeAba];
+  if (!previstas) return mapa;
+
+  var faltando = false;
+  objetos.forEach(function (obj) {
+    Object.keys(obj).forEach(function (chave) {
+      if (mapa[chave] === undefined && previstas.indexOf(chave) !== -1) faltando = true;
+    });
+  });
+  if (!faltando) return mapa;
+
+  garantirCabecalhos(nomeAba); // acrescenta ao fim, preservando os dados
+  return obterMapaCabecalhos(aba);
+}
+
+/**
  * Numero da ultima linha com dados (0 se so houver cabecalho).
  * @param {string} nomeAba
  * @return {number}
@@ -363,7 +398,7 @@ function adicionarLinha(nomeAba, objeto) {
 function adicionarLinhas(nomeAba, objetos) {
   if (!objetos || !objetos.length) return [];
   var aba = obterAbaSegura(nomeAba);
-  var mapa = obterMapaCabecalhos(aba);
+  var mapa = _mapaComColunasNecessarias(aba, nomeAba, objetos);
   var nomes = Object.keys(mapa);
   var largura = nomes.length;
 
@@ -439,7 +474,7 @@ function atualizarLinhaPorId(nomeAba, colunaId, valorId, camposAtualizados) {
  */
 function atualizarLinhaPorNumero(nomeAba, numeroLinha, camposAtualizados) {
   var aba = obterAbaSegura(nomeAba);
-  var mapa = obterMapaCabecalhos(aba);
+  var mapa = _mapaComColunasNecessarias(aba, nomeAba, [camposAtualizados]);
   var indices = [];
   Object.keys(camposAtualizados).forEach(function (chave) {
     if (mapa[chave] !== undefined) indices.push(mapa[chave]);
@@ -947,6 +982,72 @@ function normalizarTexto(texto) {
 }
 
 // ===========================================================================
+// TAGS
+// ===========================================================================
+
+/**
+ * Normaliza uma lista de tags para gravacao.
+ *
+ * Aceita texto ("agua, luz; #internet") ou array. Separa por virgula ou
+ * ponto e virgula, tira o "#" do inicio, apara espacos e remove repetidas.
+ * A comparacao ignora maiusculas e acentos ("Agua" e "água" sao a mesma tag),
+ * mas a grafia gravada e a primeira que o usuario digitou.
+ *
+ * @param {string|Array<string>} entrada
+ * @return {string} Tags separadas por ", " (vazio se nenhuma).
+ */
+function normalizarTags(entrada) {
+  return listarTags(entrada).join(', ');
+}
+
+/**
+ * Transforma o conteudo da coluna tags (ou qualquer entrada aceita por
+ * normalizarTags) em array de tags unicas.
+ * @param {string|Array<string>} entrada
+ * @return {Array<string>}
+ */
+function listarTags(entrada) {
+  if (entrada === null || entrada === undefined) return [];
+  var partes = Array.isArray(entrada) ? entrada : String(entrada).split(/[,;]/);
+
+  var vistas = {};
+  var resultado = [];
+  partes.forEach(function (bruta) {
+    var tag = String(bruta === null || bruta === undefined ? '' : bruta)
+      .trim()
+      .replace(/^#+/, '')
+      .replace(/\s+/g, ' ')
+      .slice(0, 40);
+    var chave = chaveTag(tag);
+    if (!chave || vistas[chave]) return;
+    vistas[chave] = true;
+    resultado.push(tag);
+  });
+  return resultado;
+}
+
+/**
+ * Chave de comparacao de uma tag: minuscula, sem acento, sem "#".
+ * @param {string} tag
+ * @return {string}
+ */
+function chaveTag(tag) {
+  return normalizarTexto(String(tag || '').replace(/^#+/, ''));
+}
+
+/**
+ * Diz se um valor da coluna tags contem a tag procurada.
+ * @param {string} valorColuna
+ * @param {string} tag
+ * @return {boolean}
+ */
+function possuiTag(valorColuna, tag) {
+  var alvo = chaveTag(tag);
+  if (!alvo) return false;
+  return listarTags(valorColuna).some(function (t) { return chaveTag(t) === alvo; });
+}
+
+// ===========================================================================
 // AJUDANTES DE PERIODO
 // ===========================================================================
 
@@ -975,6 +1076,34 @@ function deslocarMes(chave, deslocamento) {
   var mes = parseInt(partes[1], 10) - 1 + deslocamento;
   var data = new Date(ano, mes, 1);
   return Utilities.formatDate(data, obterFusoHorario(), 'yyyy-MM');
+}
+
+/**
+ * Nome do mes por extenso a partir da chave yyyy-MM.
+ * @param {string} chave
+ * @return {string}
+ */
+function formatarMesExtenso(chave) {
+  var nomes = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho',
+               'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  var partes = String(chave).split('-');
+  var indice = parseInt(partes[1], 10) - 1;
+  if (isNaN(indice) || indice < 0 || indice > 11) return String(chave);
+  return nomes[indice] + '/' + partes[0];
+}
+
+/**
+ * Rotulo curto de mes para o eixo do grafico: "2026-03" vira "mar/26".
+ * @param {string} chave yyyy-MM
+ * @return {string}
+ */
+function rotuloMesCurto(chave) {
+  var nomes = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun',
+               'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  var partes = String(chave).split('-');
+  var indice = parseInt(partes[1], 10) - 1;
+  if (isNaN(indice) || indice < 0 || indice > 11) return String(chave);
+  return nomes[indice] + '/' + String(partes[0]).slice(2);
 }
 
 /**

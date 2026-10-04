@@ -112,6 +112,63 @@ var PREFIXOS_ID = {
 var CACHE_TTL_SEGUNDOS = 30;
 
 // ===========================================================================
+// MEMORIA DA EXECUCAO
+// ===========================================================================
+
+/**
+ * Memoria que vive so durante UMA execucao (um clique de menu, uma chamada da
+ * sidebar, um disparo de gatilho). O Apps Script recria as variaveis globais a
+ * cada execucao, entao nada aqui sobrevive entre chamadas nem fica velho entre
+ * um uso e outro da planilha.
+ *
+ * Por que existe: cada ida ao Google (ler uma faixa, consultar o cache) custa
+ * dezenas de milissegundos. Sem esta memoria, um unico lancamento relia as
+ * mesmas abas dezenas de vezes e consultava o CacheService mais de mil vezes
+ * - cada formatarData() perguntava o fuso horario, que perguntava a
+ * configuracao, que ia ao cache do Google.
+ *
+ * Regra: TODA escrita em aba de dados passa por esta camada (adicionarLinhas,
+ * atualizarLinhaPorNumero, removerLinhas, escreverIntervalo), que mantem a
+ * memoria coerente. Escrita direta com getRange().setValues() fora daqui
+ * deixaria a memoria desatualizada dentro da mesma execucao.
+ */
+var _MEMO = _novaMemoria();
+
+/** @return {Object} Memoria vazia. @private */
+function _novaMemoria() {
+  return { abas: {}, cabecalhos: {}, tabelas: {}, config: null };
+}
+
+/**
+ * Esquece o que se sabe de uma aba (ou de tudo, sem argumento).
+ * @param {string=} nomeAba
+ * @private
+ */
+function _invalidarMemoria(nomeAba) {
+  if (!nomeAba) {
+    _MEMO = _novaMemoria();
+    return;
+  }
+  delete _MEMO.tabelas[nomeAba];
+  delete _MEMO.cabecalhos[nomeAba];
+  if (nomeAba === ABAS.CONFIG) _MEMO.config = null;
+}
+
+/**
+ * Copia rasa de uma linha. Quem le recebe copias, nunca o objeto guardado:
+ * varias funcoes anexam campos calculados as linhas que recebem, e isso nao
+ * pode vazar para a proxima leitura.
+ * @private
+ */
+function _copiarLinha(linha) {
+  var copia = {};
+  for (var chave in linha) {
+    if (Object.prototype.hasOwnProperty.call(linha, chave)) copia[chave] = linha[chave];
+  }
+  return copia;
+}
+
+// ===========================================================================
 // ACESSO A PLANILHA E ABAS
 // ===========================================================================
 
@@ -136,6 +193,8 @@ function obterPlanilha() {
  */
 function obterAbaSegura(nomeAba, criarSeNaoExistir) {
   if (criarSeNaoExistir === undefined) criarSeNaoExistir = true;
+  if (_MEMO.abas[nomeAba]) return _MEMO.abas[nomeAba];
+
   var planilha = obterPlanilha();
   var aba = planilha.getSheetByName(nomeAba);
   if (!aba) {
@@ -144,6 +203,7 @@ function obterAbaSegura(nomeAba, criarSeNaoExistir) {
     }
     aba = planilha.insertSheet(nomeAba);
   }
+  _MEMO.abas[nomeAba] = aba;
   return aba;
 }
 
@@ -190,6 +250,7 @@ function garantirCabecalhos(nomeAba, cabecalhos) {
     .setFontColor('#ffffff')
     .setVerticalAlignment('middle');
   aba.setFrozenRows(1);
+  _invalidarMemoria(nomeAba); // cabecalhos podem ter mudado
   _limparCacheTabela(nomeAba);
   return aba;
 }
@@ -200,13 +261,21 @@ function garantirCabecalhos(nomeAba, cabecalhos) {
  * @return {Object<string, number>}
  */
 function obterMapaCabecalhos(aba) {
-  var totalColunas = Math.max(aba.getLastColumn(), 1);
-  var linha = aba.getRange(1, 1, 1, totalColunas).getValues()[0];
+  var nomeAba = aba.getName();
+  if (_MEMO.cabecalhos[nomeAba]) return _MEMO.cabecalhos[nomeAba];
+
+  // Se a tabela ja foi lida nesta execucao, os cabecalhos vieram junto.
+  var tabela = _MEMO.tabelas[nomeAba];
+  var linha = tabela
+    ? tabela.cabecalhos
+    : aba.getRange(1, 1, 1, Math.max(aba.getLastColumn(), 1)).getValues()[0];
+
   var mapa = {};
   for (var i = 0; i < linha.length; i++) {
     var nome = String(linha[i] || '').trim();
     if (nome) mapa[nome] = i;
   }
+  _MEMO.cabecalhos[nomeAba] = mapa;
   return mapa;
 }
 
@@ -232,24 +301,41 @@ function obterUltimaLinha(nomeAba) {
  * @return {{cabecalhos: Array<string>, linhas: Array<Object>}}
  */
 function lerTabela(nomeAba) {
+  var guardada = _MEMO.tabelas[nomeAba];
+  if (!guardada) {
+    guardada = _lerTabelaDaPlanilha(nomeAba);
+    _MEMO.tabelas[nomeAba] = guardada;
+  }
+  return {
+    cabecalhos: guardada.cabecalhos.slice(),
+    linhas: guardada.linhas.map(_copiarLinha)
+  };
+}
+
+/**
+ * Leitura real, sem memoria. Uma unica getValues para a tabela inteira.
+ * @param {string} nomeAba
+ * @return {{cabecalhos: Array<string>, linhas: Array<Object>}}
+ * @private
+ */
+function _lerTabelaDaPlanilha(nomeAba) {
   var aba = obterAbaSegura(nomeAba);
-  var ultimaLinha = aba.getLastRow();
-  var ultimaColuna = Math.max(aba.getLastColumn(), 1);
-  var cabecalhos = aba.getRange(1, 1, 1, ultimaColuna).getValues()[0]
-    .map(function (v) { return String(v || '').trim(); });
 
-  if (ultimaLinha < 2) return { cabecalhos: cabecalhos, linhas: [] };
+  // getDataRange + getValues: cabecalho e dados numa unica ida ao Google, sem
+  // perguntar antes a ultima linha e a ultima coluna.
+  var tudo = aba.getDataRange().getValues();
+  var cabecalhos = (tudo[0] || ['']).map(function (v) { return String(v || '').trim(); });
 
-  // Uma unica chamada getValues para toda a tabela (nada de getRange em loop).
-  var valores = aba.getRange(2, 1, ultimaLinha - 1, ultimaColuna).getValues();
+  if (tudo.length < 2) return { cabecalhos: cabecalhos, linhas: [] };
+
   var linhas = [];
-  for (var i = 0; i < valores.length; i++) {
-    var bruto = valores[i];
+  for (var i = 1; i < tudo.length; i++) {
+    var bruto = tudo[i];
     // Ignora linhas completamente vazias (restos de exclusao manual).
     var temConteudo = bruto.some(function (v) { return v !== '' && v !== null; });
     if (!temConteudo) continue;
 
-    var objeto = { _linha: i + 2 };
+    var objeto = { _linha: i + 1 };
     for (var c = 0; c < cabecalhos.length; c++) {
       if (cabecalhos[c]) objeto[cabecalhos[c]] = bruto[c];
     }
@@ -294,6 +380,17 @@ function adicionarLinhas(nomeAba, objetos) {
 
   var primeiraLinha = aba.getLastRow() + 1;
   aba.getRange(primeiraLinha, 1, matriz.length, largura).setValues(matriz);
+
+  // Acrescenta as linhas novas a memoria em vez de descarta-la: assim a
+  // proxima leitura da mesma aba, na mesma execucao, nao volta a planilha.
+  var tabela = _MEMO.tabelas[nomeAba];
+  if (tabela) {
+    matriz.forEach(function (valores, i) {
+      var objeto = { _linha: primeiraLinha + i };
+      nomes.forEach(function (nome) { objeto[nome] = valores[mapa[nome]]; });
+      tabela.linhas.push(objeto);
+    });
+  }
   _limparCacheTabela(nomeAba);
 
   return matriz.map(function (_, i) { return primeiraLinha + i; });
@@ -353,7 +450,29 @@ function atualizarLinhaPorNumero(nomeAba, numeroLinha, camposAtualizados) {
   var maior = Math.max.apply(null, indices);
   var largura = maior - menor + 1;
   var faixa = aba.getRange(numeroLinha, menor + 1, 1, largura);
-  var atuais = faixa.getValues()[0];
+
+  // Os valores das colunas intermediarias vem da memoria quando a tabela ja
+  // foi lida nesta execucao; senao, da planilha.
+  var tabela = _MEMO.tabelas[nomeAba];
+  var guardada = null;
+  if (tabela) {
+    for (var i = 0; i < tabela.linhas.length; i++) {
+      if (tabela.linhas[i]._linha === numeroLinha) { guardada = tabela.linhas[i]; break; }
+    }
+  }
+  var nomesPorIndice = {};
+  Object.keys(mapa).forEach(function (nome) { nomesPorIndice[mapa[nome]] = nome; });
+
+  var atuais;
+  if (guardada) {
+    atuais = [];
+    for (var c = menor; c <= maior; c++) {
+      var valorGuardado = guardada[nomesPorIndice[c]];
+      atuais.push(valorGuardado === undefined ? '' : valorGuardado);
+    }
+  } else {
+    atuais = faixa.getValues()[0];
+  }
 
   Object.keys(camposAtualizados).forEach(function (chave) {
     if (mapa[chave] === undefined) return;
@@ -362,6 +481,14 @@ function atualizarLinhaPorNumero(nomeAba, numeroLinha, camposAtualizados) {
   });
 
   faixa.setValues([atuais]);
+
+  if (guardada) {
+    for (var k = menor; k <= maior; k++) {
+      if (nomesPorIndice[k]) guardada[nomesPorIndice[k]] = atuais[k - menor];
+    }
+  } else if (tabela) {
+    _invalidarMemoria(nomeAba); // linha fora da memoria: melhor reler
+  }
   _limparCacheTabela(nomeAba);
 }
 
@@ -376,9 +503,48 @@ function atualizarLinhaPorNumero(nomeAba, numeroLinha, camposAtualizados) {
 function removerLinhaPorId(nomeAba, colunaId, valorId) {
   var registro = buscarPorId(nomeAba, colunaId, valorId);
   if (!registro) return false;
-  obterAbaSegura(nomeAba).deleteRow(registro._linha);
-  _limparCacheTabela(nomeAba);
+  removerLinhas(nomeAba, [registro._linha]);
   return true;
+}
+
+/**
+ * Remove varias linhas pelo numero, de baixo para cima (assim os numeros das
+ * linhas que faltam remover nao se deslocam no meio do caminho).
+ * @param {string} nomeAba
+ * @param {Array<number>} numerosLinha
+ * @return {number} Quantidade removida.
+ */
+function removerLinhas(nomeAba, numerosLinha) {
+  var unicos = {};
+  (numerosLinha || []).forEach(function (n) { if (n >= 2) unicos[n] = true; });
+  var ordenados = Object.keys(unicos).map(Number).sort(function (a, b) { return b - a; });
+  if (!ordenados.length) return 0;
+
+  var aba = obterAbaSegura(nomeAba);
+  ordenados.forEach(function (numero) { aba.deleteRow(numero); });
+
+  // Os numeros de linha de tudo que estava abaixo mudaram: relê na proxima vez.
+  _invalidarMemoria(nomeAba);
+  _limparCacheTabela(nomeAba);
+  return ordenados.length;
+}
+
+/**
+ * Escreve um bloco retangular de valores numa aba de dados, mantendo a
+ * memoria da execucao coerente. Para escritas que nao sao "linha a linha",
+ * como as colunas calculadas da aba Metas.
+ * @param {string} nomeAba
+ * @param {number} linha
+ * @param {number} coluna
+ * @param {Array<Array<*>>} matriz
+ */
+function escreverIntervalo(nomeAba, linha, coluna, matriz) {
+  if (!matriz || !matriz.length) return;
+  obterAbaSegura(nomeAba)
+    .getRange(linha, coluna, matriz.length, matriz[0].length)
+    .setValues(matriz);
+  _invalidarMemoria(nomeAba);
+  _limparCacheTabela(nomeAba);
 }
 
 // ===========================================================================
@@ -406,6 +572,20 @@ function gerarId(prefixo) {
  * @return {Object<string, string>}
  */
 function obterConfigTodas() {
+  // Memoria da execucao primeiro: esta funcao e chamada milhares de vezes por
+  // execucao (todo formatarData pergunta o fuso horario).
+  if (_MEMO.config) return _MEMO.config;
+  _MEMO.config = _carregarConfig();
+  return _MEMO.config;
+}
+
+/**
+ * Carrega a configuracao: cache do Google (compartilhado entre execucoes,
+ * TTL curto) e, se vazio, a aba Config.
+ * @return {Object<string, *>}
+ * @private
+ */
+function _carregarConfig() {
   var cache = CacheService.getDocumentCache();
   var chaveCache = 'config_todas';
   if (cache) {
@@ -491,8 +671,8 @@ function definirConfig(chave, valor, descricao) {
       chave: chave, valor: valor, descricao: descricao || ''
     });
   }
-  var cache = CacheService.getDocumentCache();
-  if (cache) { try { cache.remove('config_todas'); } catch (e) {} }
+  // adicionarLinha/atualizarLinhaPorNumero ja invalidam a memoria e o cache
+  // da aba Config (via _limparCacheTabela).
 }
 
 /** @return {string} Fuso horario configurado (padrao America/Sao_Paulo). */
@@ -523,21 +703,22 @@ function obterMoeda() {
  * @private
  */
 function _limparCacheTabela(nomeAba) {
+  // So a configuracao vive no cache do Google. Escrever em qualquer outra aba
+  // nao custa nenhuma ida ao CacheService.
+  if (nomeAba !== ABAS.CONFIG) return;
+  _MEMO.config = null;
   var cache = CacheService.getDocumentCache();
   if (!cache) return;
-  try {
-    if (nomeAba === ABAS.CONFIG) cache.remove('config_todas');
-    if (nomeAba === ABAS.CATEGORIAS) cache.remove('categorias_nomes');
-    cache.remove('indicadores');
-  } catch (e) { /* cache e best-effort */ }
+  try { cache.remove('config_todas'); } catch (e) { /* cache e best-effort */ }
 }
 
-/** Limpa todo o cache conhecido do documento. */
+/** Limpa todo o cache conhecido do documento e a memoria da execucao. */
 function limparCache() {
+  _invalidarMemoria();
   var cache = CacheService.getDocumentCache();
   if (!cache) return;
   try {
-    cache.removeAll(['config_todas', 'categorias_nomes', 'indicadores', 'insights_ia']);
+    cache.removeAll(['config_todas', 'insights_ia']);
   } catch (e) {}
 }
 

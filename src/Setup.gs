@@ -752,73 +752,49 @@ function removerDadosExemplo() {
   return comLock(function () {
     var removidos = 0;
 
-    // Apaga de baixo para cima, para os numeros de linha nao se deslocarem.
-    [[ABAS.LANCAMENTOS, 'origem'], [ABAS.METAS_MOVIMENTOS, 'origem']]
-      .forEach(function (par) {
-        var aba = obterAbaSegura(par[0]);
-        var linhas = lerTabela(par[0]).linhas
-          .filter(function (l) { return String(l[par[1]] || '').indexOf('EXEMPLO') !== -1; })
-          .map(function (l) { return l._linha; })
-          .sort(function (a, b) { return b - a; });
-        linhas.forEach(function (numero) { aba.deleteRow(numero); removidos++; });
-      });
+    /** Numeros de linha de uma aba que satisfazem o filtro. */
+    function linhasOnde(nomeAba, filtro) {
+      return lerTabela(nomeAba).linhas.filter(filtro).map(function (l) { return l._linha; });
+    }
+
+    // Lancamentos e movimentos marcados como EXEMPLO.
+    [ABAS.LANCAMENTOS, ABAS.METAS_MOVIMENTOS].forEach(function (nomeAba) {
+      removidos += removerLinhas(nomeAba, linhasOnde(nomeAba, function (l) {
+        return String(l.origem || '').indexOf('EXEMPLO') !== -1;
+      }));
+    });
 
     // Aportes de exemplo geram lancamentos com origem META:<id>; limpa os orfaos.
-    var abaLancamentos = obterAbaSegura(ABAS.LANCAMENTOS);
     var movimentosExistentes = {};
     lerTabela(ABAS.METAS_MOVIMENTOS).linhas.forEach(function (m) {
       movimentosExistentes[String(m.id_movimento || '').trim()] = true;
     });
-    lerTabela(ABAS.LANCAMENTOS).linhas
-      .filter(function (l) {
-        var origem = String(l.origem || '');
-        if (origem.indexOf('META:') !== 0) return false;
-        return !movimentosExistentes[origem.slice(5)];
-      })
-      .map(function (l) { return l._linha; })
-      .sort(function (a, b) { return b - a; })
-      .forEach(function (numero) { abaLancamentos.deleteRow(numero); removidos++; });
+    removidos += removerLinhas(ABAS.LANCAMENTOS, linhasOnde(ABAS.LANCAMENTOS, function (l) {
+      var origem = String(l.origem || '');
+      return origem.indexOf('META:') === 0 && !movimentosExistentes[origem.slice(5)];
+    }));
 
     // Recorrencias de exemplo e tudo o que elas geraram.
-    var abaRecorrentes = obterAbaSegura(ABAS.RECORRENTES);
     var idsRecorrentesExemplo = {};
     lerTabela(ABAS.RECORRENTES).linhas
-      .filter(function (r) {
-        return String(r.observacoes || '').indexOf('EXEMPLO') !== -1;
-      })
-      .forEach(function (r) {
-        idsRecorrentesExemplo[String(r.id_recorrente || '').trim()] = true;
-      });
+      .filter(function (r) { return String(r.observacoes || '').indexOf('EXEMPLO') !== -1; })
+      .forEach(function (r) { idsRecorrentesExemplo[String(r.id_recorrente || '').trim()] = true; });
 
     if (Object.keys(idsRecorrentesExemplo).length) {
-      var abaLancamentosRec = obterAbaSegura(ABAS.LANCAMENTOS);
-      lerTabela(ABAS.LANCAMENTOS).linhas
-        .filter(function (l) {
-          var origem = String(l.origem || '');
-          if (origem.indexOf('RECORRENTE:') !== 0) return false;
-          return !!idsRecorrentesExemplo[origem.split(':')[1]];
-        })
-        .map(function (l) { return l._linha; })
-        .sort(function (a, b) { return b - a; })
-        .forEach(function (numero) { abaLancamentosRec.deleteRow(numero); removidos++; });
-
-      lerTabela(ABAS.RECORRENTES).linhas
-        .filter(function (r) {
-          return !!idsRecorrentesExemplo[String(r.id_recorrente || '').trim()];
-        })
-        .map(function (r) { return r._linha; })
-        .sort(function (a, b) { return b - a; })
-        .forEach(function (numero) { abaRecorrentes.deleteRow(numero); removidos++; });
+      removidos += removerLinhas(ABAS.LANCAMENTOS, linhasOnde(ABAS.LANCAMENTOS, function (l) {
+        var origem = String(l.origem || '');
+        return origem.indexOf('RECORRENTE:') === 0 &&
+               !!idsRecorrentesExemplo[origem.split(':')[1]];
+      }));
+      removidos += removerLinhas(ABAS.RECORRENTES, linhasOnde(ABAS.RECORRENTES, function (r) {
+        return !!idsRecorrentesExemplo[String(r.id_recorrente || '').trim()];
+      }));
     }
 
     // Meta de exemplo.
-    var metaExemplo = lerTabela(ABAS.METAS).linhas.filter(function (m) {
+    removidos += removerLinhas(ABAS.METAS, linhasOnde(ABAS.METAS, function (m) {
       return normalizarTexto(m.nome) === normalizarTexto('Viagem (exemplo)');
-    })[0];
-    if (metaExemplo) {
-      obterAbaSegura(ABAS.METAS).deleteRow(metaExemplo._linha);
-      removidos++;
-    }
+    }));
 
     limparCache();
     atualizarCamposCalculadosMetas();

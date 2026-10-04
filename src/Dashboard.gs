@@ -175,9 +175,10 @@ function _aplicarFormulasDashboard(aba) {
  * Nao mexe em formulas nem na area livre do usuario.
  *
  * @param {string=} mesReferencia yyyy-MM. Se omitido, usa a celula do painel.
+ * @param {Object=} indicadoresProntos Indicadores ja calculados nesta execucao.
  * @return {Object} Indicadores usados na atualizacao.
  */
-function atualizarDashboard(mesReferencia) {
+function atualizarDashboard(mesReferencia, indicadoresProntos) {
   return comLock(function () {
     var aba = obterAbaSegura(ABAS.DASHBOARD);
 
@@ -197,7 +198,11 @@ function atualizarDashboard(mesReferencia) {
     aba.getRange(DASHBOARD_CELULA_MES)
       .setValue(_primeiroDiaDoMes(converterParaData(mes + '-01') || new Date()));
 
-    var ind = gerarIndicadores(mes);
+    // Quem acabou de calcular os indicadores (ex.: a sidebar depois de um
+    // lancamento) pode repassa-los, evitando recalcular tudo duas vezes.
+    var ind = (indicadoresProntos && indicadoresProntos.mes === mes)
+      ? indicadoresProntos
+      : gerarIndicadores(mes);
 
     // --- bloco metas e reserva ---------------------------------------------
     aba.getRange('E5:E11').setValues([

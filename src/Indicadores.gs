@@ -382,9 +382,20 @@ function avaliarOrcamentos(mesReferencia) {
     };
   }).sort(function (a, b) { return b.percentual - a.percentual; });
 
-  // Atualiza colunas calculadas das linhas existentes da aba Orcamentos.
+  // Atualiza colunas calculadas das linhas existentes da aba Orcamentos, mas
+  // so as que mudaram: esta funcao roda a cada atualizacao do painel e, sem
+  // essa checagem, regravava todas as linhas toda vez.
+  var linhaOriginal = {};
+  linhasOrcamento.forEach(function (o) { linhaOriginal[o._linha] = o; });
+
   resultado.forEach(function (item) {
     if (!item.linha) return;
+    var atual = linhaOriginal[item.linha] || {};
+    var igual = arredondar2(paraNumero(atual.valor_realizado) || 0) === item.realizado &&
+                arredondar2(paraNumero(atual.diferenca) || 0) === item.diferenca &&
+                String(atual.status || '') === item.status &&
+                String(atual.valor_realizado) !== '';
+    if (igual) return;
     try {
       atualizarLinhaPorNumero(ABAS.ORCAMENTOS, item.linha, {
         valor_realizado: item.realizado,

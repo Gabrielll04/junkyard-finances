@@ -706,7 +706,7 @@ function atualizarCamposCalculadosMetas() {
       for (var linha = inicio; linha <= fim; linha++) {
         bloco.push(valoresPorLinha[linha] || ['', '', '', '']);
       }
-      aba.getRange(inicio, primeiraColuna, bloco.length, colunas.length).setValues(bloco);
+      escreverIntervalo(ABAS.METAS, inicio, primeiraColuna, bloco);
     } else {
       // Layout alterado pelo usuario: cai para atualizacao por linha.
       linhas.forEach(function (numeroLinha) {

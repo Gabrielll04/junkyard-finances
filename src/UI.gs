@@ -1206,8 +1206,41 @@ function _respostaSidebar(nome, acao) {
  */
 function uiObterEstado(mes) {
   return _respostaSidebar('uiObterEstado', function () {
-    var ind = gerarIndicadores(mes);
-    var insights = obterUltimosInsightsEmCache() || gerarInsightsAutomaticosSemIA(ind);
+    return _montarEstadoSidebar(gerarIndicadores(mes));
+  });
+}
+
+/**
+ * Fecha uma alteracao feita pela sidebar: calcula os indicadores UMA vez,
+ * atualiza a aba Dashboard com eles e devolve o estado pronto para a sidebar
+ * redesenhar.
+ *
+ * Antes, cada lancamento custava duas execucoes: a primeira salvava e
+ * atualizava o painel; a sidebar entao chamava uiObterEstado, que recalculava
+ * tudo de novo do zero. Agora o estado volta na mesma resposta.
+ *
+ * @return {Object} Estado no formato de uiObterEstado.
+ * @private
+ */
+function _concluirAlteracaoSidebar() {
+  var ind = gerarIndicadores();
+  try {
+    atualizarDashboard(null, ind);
+  } catch (e) {
+    // O dado ja foi salvo; o painel e secundario e nao pode anular a operacao.
+    logErro('_concluirAlteracaoSidebar', 'Falha ao atualizar o painel', e.message);
+  }
+  return _montarEstadoSidebar(ind);
+}
+
+/**
+ * Monta o estado consumido pela sidebar a partir de indicadores prontos.
+ * @param {Object} ind
+ * @return {Object}
+ * @private
+ */
+function _montarEstadoSidebar(ind) {
+  var insights = obterUltimosInsightsEmCache() || gerarInsightsAutomaticosSemIA(ind);
 
     return {
       mes: ind.mes,
@@ -1242,7 +1275,6 @@ function uiObterEstado(mes) {
       statusIa: obterStatusIA(),
       atualizadoEm: formatarDataHora(new Date())
     };
-  });
 }
 
 /**
@@ -1269,8 +1301,9 @@ function uiRegistrarLancamento(payload) {
       }
     }
 
-    atualizarDashboard();
+    var estado = _concluirAlteracaoSidebar();
     return {
+      estado: estado,
       id: lancamento.id_lancamento,
       texto: lancamento.tipo + ' de ' + formatarMoeda(lancamento.valor) +
              ' em ' + formatarData(lancamento.data) + ' (' + lancamento.categoria + ')',
@@ -1291,8 +1324,7 @@ function uiRegistrarLancamento(payload) {
 function uiCriarMeta(payload) {
   return _respostaSidebar('uiCriarMeta', function () {
     var meta = criarMeta(payload);
-    atualizarDashboard();
-    return { id: meta.id_meta, nome: meta.nome };
+    return { id: meta.id_meta, nome: meta.nome, estado: _concluirAlteracaoSidebar() };
   });
 }
 
@@ -1309,8 +1341,9 @@ function uiMovimentarMeta(payload) {
       ? resgatarDaMeta(dados.metaId, dados.valor, dados.data, dados.descricao)
       : aportarEmMeta(dados.metaId, dados.valor, dados.data, dados.descricao);
 
-    atualizarDashboard();
+    var estado = _concluirAlteracaoSidebar();
     return {
+      estado: estado,
       saldo: formatarMoeda(resultado.saldoAtual),
       progresso: resultado.progressoPercentual,
       nome: resultado.meta ? resultado.meta.nome : ''
@@ -1383,7 +1416,7 @@ function uiGerarInsights() {
 function uiAtualizarDashboard() {
   return _respostaSidebar('uiAtualizarDashboard', function () {
     var ind = atualizarDashboard();
-    return { mes: ind.mesFormatado };
+    return { mes: ind.mesFormatado, estado: _montarEstadoSidebar(ind) };
   });
 }
 
@@ -1512,8 +1545,9 @@ function uiEditarLancamento(payload) {
       descricao: dados.descricao
     });
 
-    atualizarDashboard();
+    var estado = _concluirAlteracaoSidebar();
     return {
+      estado: estado,
       id: atualizado.id_lancamento,
       texto: formatarData(atualizado.data) + ' - ' + atualizado.tipo + ' - ' +
              formatarMoeda(paraNumero(atualizado.valor) || 0) + ' - ' +
@@ -1534,7 +1568,7 @@ function uiExcluirLancamento(payload) {
 
     var resultado = excluirLancamento(dados.id, dados.modo || 'SOFT',
                                       dados.confirmacao === true);
-    atualizarDashboard();
+    resultado.estado = _concluirAlteracaoSidebar();
     return resultado;
   });
 }
@@ -1550,8 +1584,10 @@ function uiReativarLancamento(payload) {
     if (!dados.id) throw new Error('Lancamento nao informado.');
 
     var atualizado = editarLancamento(dados.id, { status: STATUS_LANCAMENTO.CONFIRMADO });
-    atualizarDashboard();
-    return { id: atualizado.id_lancamento, status: atualizado.status };
+    return {
+      id: atualizado.id_lancamento, status: atualizado.status,
+      estado: _concluirAlteracaoSidebar()
+    };
   });
 }
 
@@ -1593,7 +1629,10 @@ function uiAlternarRecorrente(payload) {
     var regra = dados.ativa
       ? ativarRecorrente(dados.id)
       : desativarRecorrente(dados.id);
-    return { id: regra.id_recorrente, ativa: regra.ativa };
+    return {
+      id: regra.id_recorrente, ativa: regra.ativa,
+      estado: _montarEstadoSidebar(gerarIndicadores())
+    };
   });
 }
 
@@ -1606,7 +1645,9 @@ function uiExcluirRecorrente(payload) {
   return _respostaSidebar('uiExcluirRecorrente', function () {
     var dados = payload || {};
     if (!dados.id) throw new Error('Recorrencia nao informada.');
-    return excluirRecorrente(dados.id, dados.modo || 'SOFT');
+    var resultado = excluirRecorrente(dados.id, dados.modo || 'SOFT');
+    resultado.estado = _montarEstadoSidebar(gerarIndicadores());
+    return resultado;
   });
 }
 
@@ -1619,7 +1660,9 @@ function uiGerarRecorrentes(payload) {
   return _respostaSidebar('uiGerarRecorrentes', function () {
     var dados = payload || {};
     var resultado = gerarLancamentosRecorrentes({ idRecorrente: dados.idRecorrente });
-    if (resultado.criados > 0) atualizarDashboard();
+    resultado.estado = resultado.criados > 0
+      ? _concluirAlteracaoSidebar()
+      : _montarEstadoSidebar(gerarIndicadores());
     return resultado;
   });
 }

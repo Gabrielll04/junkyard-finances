@@ -830,6 +830,15 @@ function renderizarInsights(insights, statusIa) {
 
 /* ---------------------------- CARGA INICIAL ---------------------------- */
 
+/**
+ * Desenha o estado que o servidor devolveu junto com a resposta de uma
+ * operacao. So pede o estado de novo se ele nao veio (resposta antiga).
+ */
+function aplicarEstado(resposta) {
+  if (resposta && resposta.estado) renderizar(resposta.estado);
+  else carregarEstado();
+}
+
 function carregarEstado() {
   chamarServidor('uiObterEstado', null, renderizar, function (erro) {
     document.getElementById('cabecalhoSub').textContent = 'Erro ao carregar';
@@ -847,8 +856,8 @@ carregarEstado();
 document.getElementById('btnAtualizar').addEventListener('click', carregarEstado);
 
 document.getElementById('btnAtualizarPainelPlanilha').addEventListener('click', function () {
-  chamarServidor('uiAtualizarDashboard', null, function () {
-    carregarEstado();
+  chamarServidor('uiAtualizarDashboard', null, function (dados) {
+    aplicarEstado(dados);
   }, function (erro) {
     mostrarMensagem('msgLancamento', erro, 'erro');
   });
@@ -896,7 +905,7 @@ document.getElementById('formLancamento').addEventListener('submit', function (e
     document.getElementById('lancDescricao').value = '';
     document.getElementById('lancRepetir').checked = false;
     document.getElementById('blocoFrequencia').style.display = 'none';
-    carregarEstado();
+    aplicarEstado(dados);
   }, function (erro) {
     mostrarMensagem('msgLancamento', erro, 'erro');
   });
@@ -929,7 +938,7 @@ document.getElementById('formMovimento').addEventListener('submit', function (ev
       ' (' + dados.progresso + '%).', 'ok');
     document.getElementById('movValor').value = '';
     document.getElementById('movDescricao').value = '';
-    carregarEstado();
+    aplicarEstado(dados);
   }, function (erro) {
     mostrarMensagem('msgMovimento', erro, 'erro');
   });
@@ -962,7 +971,7 @@ document.getElementById('formMeta').addEventListener('submit', function (evento)
   }, function (dados) {
     mostrarMensagem('msgMeta', 'Meta "' + dados.nome + '" criada.', 'ok');
     document.getElementById('formMeta').reset();
-    carregarEstado();
+    aplicarEstado(dados);
   }, function (erro) {
     mostrarMensagem('msgMeta', erro, 'erro');
   });
@@ -1037,7 +1046,7 @@ document.getElementById('btnGerarRecorrentes').addEventListener('click', functio
   chamarServidor('uiGerarRecorrentes', {}, function (resultado) {
     mostrarMensagem('msgRecorrentes', resultado.mensagem,
                     resultado.criados > 0 ? 'ok' : 'info');
-    if (resultado.criados > 0) carregarEstado();
+    aplicarEstado(resultado);
   }, function (erro) {
     mostrarMensagem('msgRecorrentes', erro, 'erro');
   });
@@ -1056,8 +1065,8 @@ document.getElementById('listaRecorrentes').addEventListener('click', function (
   if (acao === 'alternar-rec') {
     chamarServidor('uiAlternarRecorrente', {
       id: id, ativa: botao.dataset.ativa !== '1'
-    }, function () {
-      carregarEstado();
+    }, function (r) {
+      aplicarEstado(r);
     }, function (erro) {
       mostrarMensagem('msgRecorrentes', erro, 'erro');
     });
@@ -1071,7 +1080,7 @@ document.getElementById('listaRecorrentes').addEventListener('click', function (
     }
     chamarServidor('uiExcluirRecorrente', { id: id, modo: 'HARD' }, function (r) {
       mostrarMensagem('msgRecorrentes', r.mensagem, 'ok');
-      carregarEstado();
+      aplicarEstado(r);
     }, function (erro) {
       mostrarMensagem('msgRecorrentes', erro, 'erro');
     });
@@ -1102,16 +1111,16 @@ document.getElementById('listaExtrato').addEventListener('click', function (even
       }
       chamarServidor('uiExcluirLancamento', { id: id, modo: 'SOFT' }, function (r) {
         mostrarMensagem('msgExtrato', r.mensagem, 'ok');
-        carregarEstado();
+        aplicarEstado(r);
       }, function (erro) {
         mostrarMensagem('msgExtrato', erro, 'erro');
       });
       break;
 
     case 'reativar':
-      chamarServidor('uiReativarLancamento', { id: id }, function () {
+      chamarServidor('uiReativarLancamento', { id: id }, function (r) {
         mostrarMensagem('msgExtrato', 'Lancamento reativado.', 'ok');
-        carregarEstado();
+        aplicarEstado(r);
       }, function (erro) {
         mostrarMensagem('msgExtrato', erro, 'erro');
       });
@@ -1126,7 +1135,7 @@ document.getElementById('listaExtrato').addEventListener('click', function (even
         id: id, modo: 'HARD', confirmacao: true
       }, function (r) {
         mostrarMensagem('msgExtrato', r.mensagem, 'ok');
-        carregarEstado();
+        aplicarEstado(r);
       }, function (erro) {
         mostrarMensagem('msgExtrato', erro, 'erro');
       });
@@ -1165,7 +1174,7 @@ document.getElementById('formEdicaoLancamento').addEventListener('click', functi
   }, function (dados) {
     mostrarMensagem('msgExtrato', 'Atualizado: ' + dados.texto, 'ok');
     fecharEdicaoLancamento();
-    carregarEstado();
+    aplicarEstado(dados);
   }, function (erro) {
     mostrarMensagem('msgExtrato', erro, 'erro');
   });

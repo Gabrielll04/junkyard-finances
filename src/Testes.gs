@@ -113,14 +113,11 @@ function _removerLinhasPorIds(nomeAba, colunaId, ids) {
     if (id) conjunto[String(id).trim().toUpperCase()] = true;
   });
 
-  var aba = obterAbaSegura(nomeAba);
-  lerTabela(nomeAba).linhas
+  removerLinhas(nomeAba, lerTabela(nomeAba).linhas
     .filter(function (linha) {
       return conjunto[String(linha[colunaId] || '').trim().toUpperCase()];
     })
-    .map(function (linha) { return linha._linha; })
-    .sort(function (a, b) { return b - a; })
-    .forEach(function (numero) { aba.deleteRow(numero); });
+    .map(function (linha) { return linha._linha; }));
 }
 
 /**
@@ -137,16 +134,13 @@ function _removerPorOrigemRecorrente(ids) {
   });
 
   [ABAS.LANCAMENTOS, ABAS.METAS_MOVIMENTOS].forEach(function (nomeAba) {
-    var aba = obterAbaSegura(nomeAba);
-    lerTabela(nomeAba).linhas
+    removerLinhas(nomeAba, lerTabela(nomeAba).linhas
       .filter(function (linha) {
         var origem = String(linha.origem || '');
         if (origem.indexOf('RECORRENTE:') !== 0) return false;
         return !!conjunto[origem.split(':')[1]];
       })
-      .map(function (linha) { return linha._linha; })
-      .sort(function (a, b) { return b - a; })
-      .forEach(function (numero) { aba.deleteRow(numero); });
+      .map(function (linha) { return linha._linha; }));
   });
 }
 
@@ -160,15 +154,12 @@ function _removerLancamentosEspelhoOrfaos() {
     existentes[String(m.id_movimento || '').trim()] = true;
   });
 
-  var aba = obterAbaSegura(ABAS.LANCAMENTOS);
-  lerTabela(ABAS.LANCAMENTOS).linhas
+  removerLinhas(ABAS.LANCAMENTOS, lerTabela(ABAS.LANCAMENTOS).linhas
     .filter(function (l) {
       var origem = String(l.origem || '');
       return origem.indexOf('META:') === 0 && !existentes[origem.slice(5)];
     })
-    .map(function (l) { return l._linha; })
-    .sort(function (a, b) { return b - a; })
-    .forEach(function (numero) { aba.deleteRow(numero); });
+    .map(function (l) { return l._linha; }));
 }
 
 /**

@@ -444,6 +444,48 @@ clasp open --addon     # ou abra a planilha direto no navegador
 Alterou algo no repositório? `clasp push` de novo e pronto — não precisa
 copiar nada a mão nunca mais.
 
+### Projeto já criado pelo navegador: `Project settings not found`
+
+Se o projeto foi vinculado pelo navegador (colando os arquivos ou com o
+`Vincular.gs`), a pasta local não sabe qual projeto atualizar e o `clasp push`
+responde `Project settings not found`. Ligue a pasta ao projeto que **já
+existe** — não crie outro.
+
+**1. Pegue o ID do script.** Abra a planilha → `Extensões → Apps Script` →
+**⚙ Configurações do projeto** → seção **IDs** → **ID do script**. Ele também
+aparece na URL do editor: `script.google.com/.../projects/ESTE_TRECHO/edit`.
+
+**2. Crie o `.clasp.json`** na raiz do repositório (ele já está no
+`.gitignore`):
+
+```bash
+echo '{"scriptId":"COLE_O_ID_AQUI","rootDir":"./src"}' > .clasp.json
+```
+
+**3. Envie:**
+
+```bash
+clasp push
+```
+
+Se ele perguntar se pode sobrescrever o manifesto (`appsscript.json`),
+responda **sim**: o do repositório tem as permissões corretas.
+
+> **Não use `clasp clone`** para isso. Ele baixa a versão que está no Google
+> **por cima** da sua pasta `src/`, desfazendo qualquer atualização que você
+> tenha acabado de puxar do repositório. Se já usou, recupere com
+> `git checkout -- src/`.
+
+`clasp push` substitui **todos** os arquivos do projeto pelos de `src/`
+(menos os listados no `.claspignore`). Arquivos que só existam no Google são
+apagados — é o comportamento esperado, já que o repositório é a fonte.
+
+| Erro no `clasp push` | Solução |
+|---|---|
+| `Project settings not found` | Falta o `.clasp.json`. Passos 1 e 2 acima. |
+| `User has not enabled the Apps Script API` | Ligue em <https://script.google.com/home/usersettings>, **na conta do clasp**. |
+| `Requested entity was not found` ou permissão negada | O clasp está logado em outra conta. `clasp logout`, depois `clasp login` escolhendo a conta dona da planilha. |
+
 | Problema | Solução |
 |---|---|
 | `User has not enabled the Apps Script API` | Ligue em <https://script.google.com/home/usersettings> (é o interruptor da conta, e para o clasp ele basta) |
